@@ -13,12 +13,14 @@ struct LibraryPaneView: View {
                 Image(systemName: "tray.full")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .help("Item Library — reusable folder records that live in the cloud")
                 Text("Item Library")
                     .font(.system(size: 12, weight: .semibold))
                 Spacer()
                 Text("\(state.libraryItems.count)")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+                    .help("Number of items in the Library")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -68,6 +70,7 @@ private struct LibraryTile: View {
                 Image(systemName: "folder.fill")
                     .foregroundStyle(inUse ? Color.gray.opacity(0.55) : Color.blue.opacity(0.85))
                     .font(.system(size: 14))
+                    .help("Library item — saved across machines")
                 Text(item.name)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(inUse ? .secondary : .primary)
@@ -77,7 +80,7 @@ private struct LibraryTile: View {
                     Image(systemName: "checkmark")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(.secondary)
-                        .help("In use in Pending")
+                        .help("In use in Pending — already placed in the draft sidebar")
                 }
             }
             Spacer(minLength: 0)

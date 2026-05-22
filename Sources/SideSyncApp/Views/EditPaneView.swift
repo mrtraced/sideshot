@@ -96,6 +96,9 @@ private struct PendingItemEditor: View {
                     Image(systemName: item.libraryItemId != nil ? "link.circle.fill" : "folder.fill")
                         .foregroundStyle(item.libraryItemId != nil ? Color.accentColor : Color.blue)
                         .font(.system(size: 22))
+                        .help(item.libraryItemId != nil
+                              ? "Linked to a Library record — edits propagate across machines"
+                              : "Independent sidebar item — not in the Library")
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.name)
                             .font(.system(size: 14, weight: .semibold))
@@ -124,6 +127,9 @@ private struct PendingItemEditor: View {
                                 Image(systemName: "laptopcomputer")
                                     .font(.system(size: 10))
                                     .foregroundStyle(machine == state.machineId ? Color.green : Color.gray)
+                                    .help(machine == state.machineId
+                                          ? "This machine"
+                                          : "Path known on \(machine)")
                                 Text(machine)
                                     .font(.system(size: 11, weight: .medium))
                                 Text(libItem.paths[machine] ?? "")
@@ -131,6 +137,7 @@ private struct PendingItemEditor: View {
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
+                                    .help(libItem.paths[machine] ?? "")
                             }
                         }
                     }
@@ -257,9 +264,11 @@ private struct LibraryItemEditor: View {
                     Image(systemName: "bolt.fill")
                         .font(.system(size: 10))
                         .foregroundStyle(.yellow)
+                        .help("Local override — this machine uses this path instead of the shared one")
                     Text("Override: \(override)")
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(.secondary)
+                        .help(override)
                 }
             }
         }

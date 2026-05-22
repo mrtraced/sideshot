@@ -12,6 +12,7 @@ struct SideSyncToolbar: SwiftUI.ToolbarContent {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 4)
+                .help("This machine's name in the cloud (auto-detected from System Settings → Computer Name)")
         }
 
         // Left — cloud button: opens snapshot drawer

@@ -46,6 +46,7 @@ struct SnapshotDrawerView: View {
             Image(systemName: "icloud.fill")
                 .font(.system(size: 11))
                 .foregroundStyle(.indigo)
+                .help("Cloud snapshot — saved sidebar from a known machine")
             if let snap = selectedSnapshot {
                 Text(snap.name)
                     .font(.system(size: 12, weight: .semibold))
@@ -87,6 +88,7 @@ struct SnapshotDrawerView: View {
                         Image(systemName: "folder.fill")
                             .font(.system(size: 12))
                             .foregroundStyle(.blue.opacity(0.7))
+                            .help("Sidebar item captured in this snapshot")
                         VStack(alignment: .leading, spacing: 1) {
                             Text(item.name)
                                 .font(.system(size: 12))

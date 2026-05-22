@@ -15,6 +15,7 @@ struct PathRow: View {
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(.blue)
                     .frame(width: 16)
+                    .help("This machine")
             } else {
                 Spacer()
                     .frame(width: 16)
@@ -25,6 +26,7 @@ struct PathRow: View {
                 .font(.system(size: 12, weight: isCurrent ? .semibold : .regular))
                 .foregroundStyle(isCurrent ? .primary : .secondary)
                 .frame(width: 90, alignment: .leading)
+                .help(isCurrent ? "This machine" : "Path on \(machineName)")
 
             // Path
             Text(path)
@@ -32,6 +34,7 @@ struct PathRow: View {
                 .foregroundStyle(pathExists ? Color.primary : Color.red)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .help(path)
 
             // Warning for non-existent paths
             if !pathExists {

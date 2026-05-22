@@ -13,12 +13,14 @@ struct PendingPaneView: View {
                 Image(systemName: "pencil.and.list.clipboard")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
+                    .help("Pending Sidebar — your working draft. Apply to push to Finder.")
                 Text("Pending Sidebar")
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
                 Text("\(state.pending.count) items")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+                    .help("Number of items in Pending")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -75,6 +77,7 @@ private struct PendingRow: View {
             Image(systemName: "folder.fill")
                 .foregroundStyle(Color.blue)
                 .font(.system(size: 14))
+                .help("Sidebar item")
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
@@ -100,7 +103,7 @@ private struct PendingRow: View {
                         Image(systemName: "sidebar.left")
                             .font(.system(size: 9))
                             .foregroundStyle(.gray)
-                            .help("Already in Current Sidebar")
+                            .help("Already in Current Sidebar — Apply is a no-op for this entry")
                     }
 
                     // Library linkage — edits propagate cross-machine
@@ -108,22 +111,22 @@ private struct PendingRow: View {
                         Image(systemName: "link")
                             .font(.system(size: 9))
                             .foregroundStyle(Color.accentColor)
-                            .help("Linked to Library — edits sync via cloud")
+                            .help("Linked to Library — edits propagate to other machines via the cloud record")
                     } else {
                         Image(systemName: "link.badge.plus")
                             .font(.system(size: 9))
                             .foregroundStyle(.tertiary)
-                            .help("Independent — not linked to Library")
+                            .help("Independent — not linked to Library; edits stay local")
                     }
                 }
                 Text(abbreviatePath(item.path))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .help(item.path)
             }
         }
         .padding(.vertical, 1)
-        .help(item.path)
     }
 
     private func sameItem(_ a: String, _ b: String) -> Bool {

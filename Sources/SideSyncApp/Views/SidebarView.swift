@@ -32,6 +32,7 @@ private struct CurrentSidebarPane: View {
                 Image(systemName: "sidebar.left")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .help("Current Sidebar — live mirror of the Finder sidebar")
                 Text("Current Sidebar")
                     .font(.system(size: 12, weight: .semibold))
                 Spacer()
@@ -42,6 +43,7 @@ private struct CurrentSidebarPane: View {
                     .padding(.vertical, 1)
                     .background(.quaternary)
                     .clipShape(Capsule())
+                    .help("Read-only — edit Pending instead, then Apply")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -194,9 +196,11 @@ private struct MachineRow: View {
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(snapshots.isEmpty ? Color.gray.opacity(0.3) : Color.secondary)
                         .frame(width: 10)
+                        .help(snapshots.isEmpty ? "No snapshots from this machine" : (isExpanded ? "Collapse snapshots" : "Expand to see snapshots"))
                     Image(systemName: isMe ? "desktopcomputer" : "laptopcomputer")
                         .font(.system(size: 12))
                         .foregroundStyle(isMe ? Color.indigo : Color.secondary)
+                        .help(isMe ? "This machine" : "Other machine in your cloud")
                     VStack(alignment: .leading, spacing: 1) {
                         HStack(spacing: 4) {
                             Text(machine)
@@ -245,6 +249,7 @@ private struct SnapshotPickerRow: View {
                 Image(systemName: "camera.fill")
                     .font(.system(size: 9))
                     .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                    .help("Snapshot — a saved sidebar capture")
                 VStack(alignment: .leading, spacing: 1) {
                     Text(snapshot.name)
                         .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
