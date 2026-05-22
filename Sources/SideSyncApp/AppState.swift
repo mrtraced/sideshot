@@ -881,22 +881,82 @@ class AppState {
         }
     }
 
-    /// Update this machine's path for a cloud favorite.
+    /// Update this machine's path for a cloud favorite, syncing any linked
+    /// Pending items so the unified record stays consistent.
     func updatePath(for favorite: CloudFavorite, path: String) {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
         guard var cloudData = cloud else { return }
 
         if let idx = cloudData.favorites.firstIndex(where: { $0.id == favorite.id }) {
-            cloudData.favorites[idx].paths[machineId] = path
+            cloudData.favorites[idx].paths[machineId] = trimmed
+            cloudData.favorites[idx].pathHints = CloudFavorite.buildPathHints(from: trimmed)
             cloudData.lastUpdatedBy = machineId
             cloudData.lastUpdatedAt = Date()
 
+            // Mirror into any Pending items linked to this Library entry.
+            var newPending = config.pending
+            for i in newPending.indices where newPending[i].libraryItemId == favorite.id {
+                newPending[i].path = trimmed
+            }
+
             do {
                 try cloudService.write(cloudData)
+                config.pending = newPending
+                try configService.write(config)
                 statusMessage = "Updated path for \"\(favorite.name)\""
                 refresh()
             } catch {
                 errorMessage = "Failed to update path: \(error.localizedDescription)"
             }
+        }
+    }
+
+    /// Rename a Library record, syncing any linked Pending items.
+    func renameLibraryItem(_ favorite: CloudFavorite, newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != favorite.name else { return }
+        guard var cloudData = cloud else { return }
+
+        if let idx = cloudData.favorites.firstIndex(where: { $0.id == favorite.id }) {
+            cloudData.favorites[idx].name = trimmed
+            cloudData.lastUpdatedBy = machineId
+            cloudData.lastUpdatedAt = Date()
+
+            var newPending = config.pending
+            for i in newPending.indices where newPending[i].libraryItemId == favorite.id {
+                newPending[i].name = trimmed
+            }
+
+            do {
+                try cloudService.write(cloudData)
+                config.pending = newPending
+                try configService.write(config)
+                statusMessage = "Renamed to \"\(trimmed)\""
+                refresh()
+            } catch {
+                errorMessage = "Rename failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    // MARK: - Pending reorder + remove
+
+    func movePendingItem(id: String, by offset: Int) {
+        var newPending = pending
+        guard let idx = newPending.firstIndex(where: { $0.id == id }) else { return }
+        let target = idx + offset
+        guard target >= 0 && target < newPending.count else { return }
+        newPending.swapAt(idx, target)
+        pending = newPending
+    }
+
+    func removePendingItem(id: String) {
+        var newPending = pending
+        newPending.removeAll { $0.id == id }
+        pending = newPending
+        if selectedPendingItemId == id {
+            selectedPendingItemId = nil
         }
     }
 

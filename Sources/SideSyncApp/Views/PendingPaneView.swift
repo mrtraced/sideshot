@@ -72,6 +72,10 @@ private struct PendingRow: View {
         let exists = PathResolver.exists(item.path)
         let inCurrent = state.localFavorites.contains(where: { sameItem($0.path, item.path) })
         let isLinked = item.libraryItemId != nil
+        let isSelected = state.selectedPendingItemId == item.id
+        let idx = state.pending.firstIndex(where: { $0.id == item.id }) ?? 0
+        let canMoveUp = idx > 0
+        let canMoveDown = idx < state.pending.count - 1
 
         HStack(spacing: 8) {
             Image(systemName: "folder.fill")
@@ -124,6 +128,43 @@ private struct PendingRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .help(item.path)
+            }
+
+            Spacer(minLength: 0)
+
+            // Reorder + remove controls — only on the selected row
+            if isSelected {
+                HStack(spacing: 2) {
+                    Button {
+                        state.movePendingItem(id: item.id, by: -1)
+                    } label: {
+                        Image(systemName: "chevron.up")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(!canMoveUp)
+                    .help("Move up")
+
+                    Button {
+                        state.movePendingItem(id: item.id, by: 1)
+                    } label: {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(!canMoveDown)
+                    .help("Move down")
+
+                    Button(role: .destructive) {
+                        state.removePendingItem(id: item.id)
+                    } label: {
+                        Image(systemName: "minus.circle")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Remove from Pending")
+                }
             }
         }
         .padding(.vertical, 1)

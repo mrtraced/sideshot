@@ -168,6 +168,11 @@ private struct LibraryItemEditor: View {
     @Environment(AppState.self) private var state
     let favorite: CloudFavorite
 
+    @State private var editedName: String = ""
+    @State private var editedThisMachinePath: String = ""
+    @FocusState private var nameFocused: Bool
+    @FocusState private var pathFocused: Bool
+
     @State private var editingPath: String = ""
     @State private var isEditingPath: Bool = false
 
@@ -182,6 +187,31 @@ private struct LibraryItemEditor: View {
             }
             .padding(16)
         }
+        .onAppear { seedFields() }
+        .onChange(of: favorite.id) { _, _ in seedFields() }
+    }
+
+    private func seedFields() {
+        editedName = favorite.name
+        editedThisMachinePath = favorite.paths[state.machineId] ?? ""
+    }
+
+    private func commitName() {
+        if editedName.trimmingCharacters(in: .whitespacesAndNewlines) != favorite.name {
+            state.renameLibraryItem(favorite, newName: editedName)
+        }
+    }
+
+    private func commitThisMachinePath() {
+        let trimmed = editedThisMachinePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            // Revert empty edits
+            editedThisMachinePath = favorite.paths[state.machineId] ?? ""
+            return
+        }
+        if trimmed != favorite.paths[state.machineId] {
+            state.updatePath(for: favorite, path: trimmed)
+        }
     }
 
     @ViewBuilder
@@ -190,9 +220,17 @@ private struct LibraryItemEditor: View {
             Image(systemName: "folder.fill")
                 .font(.system(size: 28))
                 .foregroundStyle(.blue)
+                .help("Library item — edits propagate via the cloud record")
             VStack(alignment: .leading, spacing: 2) {
-                Text(favorite.name)
+                TextField("Name", text: $editedName)
+                    .textFieldStyle(.plain)
                     .font(.system(size: 15, weight: .semibold))
+                    .focused($nameFocused)
+                    .onSubmit { commitName() }
+                    .onChange(of: nameFocused) { _, focused in
+                        if !focused { commitName() }
+                    }
+                    .help("Rename — propagates to every machine that uses this record")
                 HStack(spacing: 6) {
                     if isInPending {
                         HStack(spacing: 3) {
@@ -246,18 +284,21 @@ private struct LibraryItemEditor: View {
                 .font(.system(size: 9))
                 .foregroundStyle(.secondary)
 
-            ForEach(favorite.paths.keys.sorted(), id: \.self) { machine in
+            // This machine — editable
+            thisMachinePathRow
+
+            // Other machines — read-only
+            ForEach(favorite.paths.keys.sorted().filter { $0 != state.machineId }, id: \.self) { machine in
                 PathRow(
                     machineName: machine,
                     path: favorite.paths[machine] ?? "",
-                    isCurrent: machine == state.machineId,
+                    isCurrent: false,
                     pathExists: PathResolver.exists(favorite.paths[machine] ?? "")
                 )
             }
 
-            if favorite.paths[state.machineId] == nil {
-                setPathRow
-            }
+            // setPathRow used to live here; replaced by thisMachinePathRow which
+            // handles both the empty and existing cases via a single TextField.
 
             if let override = state.config.pathOverrides[favorite.id] {
                 HStack(spacing: 4) {
@@ -272,6 +313,55 @@ private struct LibraryItemEditor: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var thisMachinePathRow: some View {
+        let exists = !editedThisMachinePath.isEmpty && PathResolver.exists(editedThisMachinePath)
+        let hasValue = !editedThisMachinePath.isEmpty
+
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.right")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.blue)
+                .frame(width: 16)
+                .help("This machine")
+
+            Text(state.machineId)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 90, alignment: .leading)
+                .help("This machine")
+
+            TextField("No path on this machine — click to set", text: $editedThisMachinePath)
+                .textFieldStyle(.plain)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(hasValue && !exists ? Color.red : Color.primary)
+                .focused($pathFocused)
+                .onSubmit { commitThisMachinePath() }
+                .onChange(of: pathFocused) { _, focused in
+                    if !focused { commitThisMachinePath() }
+                }
+                .help(hasValue ? editedThisMachinePath : "Set the local path for this machine")
+
+            if hasValue && !exists {
+                Text("\u{26a0}\u{fe0f}")
+                    .font(.system(size: 10))
+                    .help("Path does not exist on this machine")
+            }
+
+            Button {
+                pickFolder()
+            } label: {
+                Image(systemName: "folder")
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(.borderless)
+            .help("Browse for folder…")
+        }
+        .padding(.vertical, 2)
+        .padding(.horizontal, 4)
+        .background(Color.blue.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
     @ViewBuilder
