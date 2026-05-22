@@ -41,6 +41,8 @@ class AppState {
     var showSnapshotDrawer: Bool = false
     /// Snapshot currently being previewed/applied in the drawer.
     var drawerSnapshotId: String?
+    /// Machine currently selected in the drawer's left column.
+    var drawerMachineId: String?
 
     // Role change confirmation
     var showRoleChangeConfirm: Bool = false

@@ -11,12 +11,14 @@ struct ContentView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
         } content: {
-            ZStack(alignment: .bottom) {
-                PendingPaneView()
+            ZStack {
                 if state.showSnapshotDrawer {
                     SnapshotDrawerView()
-                        .transition(.move(edge: .bottom))
+                        .transition(.move(edge: .top).combined(with: .opacity))
                         .zIndex(1)
+                } else {
+                    PendingPaneView()
+                        .transition(.opacity)
                 }
             }
             .animation(.easeInOut(duration: 0.22), value: state.showSnapshotDrawer)
@@ -42,9 +44,6 @@ struct ContentView: View {
             if let favorite = state.pendingApplyFavorite {
                 SaveBeforeApplySheet(favorite: favorite)
             }
-        }
-        .sheet(isPresented: $state.showMachinesBrowser) {
-            MachinesBrowserSheet()
         }
         .sheet(isPresented: $state.showSaveSnapshotSheet) {
             SaveSnapshotSheet(onSaved: {

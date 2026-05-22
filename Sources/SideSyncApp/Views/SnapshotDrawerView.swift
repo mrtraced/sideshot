@@ -1,17 +1,29 @@
 import SwiftUI
 import SideSyncLib
 
-/// Bottom-up drawer that overlays the Pending pane.
-/// Lets the user pick a snapshot and load it into Pending (not Finder).
+/// Full-pane takeover that replaces the Pending view when active.
+/// Lets the user browse snapshots across all machines, then either
+/// replace Pending with a snapshot's contents, harvest unique items
+/// into Library, or delete the snapshot.
 struct SnapshotDrawerView: View {
     @Environment(AppState.self) private var state
 
     var body: some View {
         VStack(spacing: 0) {
             header
+
             Divider()
-            body_
+
+            HSplitView {
+                machinesList
+                    .frame(minWidth: 140, idealWidth: 160, maxWidth: 200)
+
+                snapshotDetail
+                    .frame(minWidth: 220)
+            }
+
             Divider()
+
             footer
         }
         .background(
@@ -26,16 +38,14 @@ struct SnapshotDrawerView: View {
         )
         .overlay(
             Rectangle()
-                .fill(Color.indigo.opacity(0.5))
+                .fill(Color.indigo.opacity(0.45))
                 .frame(height: 2),
             alignment: .top
         )
         .shadow(color: Color.black.opacity(0.18), radius: 8, x: 0, y: -3)
-        .frame(maxWidth: .infinity)
-        .frame(height: 320)
     }
 
-    // MARK: - Header — dropdown
+    // MARK: - Header
 
     @ViewBuilder
     private var header: some View {
@@ -43,29 +53,9 @@ struct SnapshotDrawerView: View {
             Image(systemName: "icloud.fill")
                 .font(.system(size: 13))
                 .foregroundStyle(.indigo)
-            Text("Snapshots")
+            Text("Snapshots & Machines")
                 .font(.system(size: 12, weight: .semibold))
-
             Spacer()
-
-            if state.allSnapshots.isEmpty {
-                Text("No snapshots yet")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Picker("", selection: Binding(
-                    get: { state.drawerSnapshotId ?? state.allSnapshots.first?.id ?? "" },
-                    set: { state.drawerSnapshotId = $0 }
-                )) {
-                    ForEach(state.allSnapshots) { snap in
-                        Text(displayName(snap))
-                            .tag(snap.id)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(minWidth: 240)
-            }
-
             Button {
                 state.showSnapshotDrawer = false
             } label: {
@@ -74,72 +64,193 @@ struct SnapshotDrawerView: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("Close snapshot picker")
+            .help("Close")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.bar)
     }
 
-    private func displayName(_ snap: SidebarSnapshot) -> String {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "MMM d, HH:mm"
-        return "\(snap.name) — \(snap.machineId) · \(fmt.string(from: snap.timestamp))"
-    }
-
-    // MARK: - Body — list of items in selected snapshot
+    // MARK: - Machines list (left)
 
     @ViewBuilder
-    private var body_: some View {
-        if let snap = selectedSnapshot {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(snap.items.enumerated()), id: \.offset) { _, item in
-                        HStack(spacing: 8) {
-                            Image(systemName: "folder")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(item.name)
-                                    .font(.system(size: 12))
-                                Text(item.path)
-                                    .font(.system(size: 9, design: .monospaced))
-                                    .foregroundStyle(.tertiary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            }
-                            Spacer()
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 3)
+    private var machinesList: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("MACHINES")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 6)
+            .padding(.bottom, 4)
+
+            if state.knownMachines.isEmpty {
+                VStack(spacing: 4) {
+                    Image(systemName: "laptopcomputer.slash")
+                        .font(.system(size: 18))
+                        .foregroundStyle(.tertiary)
+                    Text("No machines yet")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(selection: Binding(
+                    get: { state.drawerMachineId ?? state.machineId },
+                    set: {
+                        state.drawerMachineId = $0
+                        state.drawerSnapshotId = nil
+                    }
+                )) {
+                    ForEach(state.knownMachines, id: \.self) { machine in
+                        machineRow(machine)
+                            .tag(machine as String?)
                     }
                 }
-                .padding(.vertical, 6)
+                .listStyle(.sidebar)
             }
-        } else {
-            VStack(spacing: 6) {
-                Image(systemName: "tray")
-                    .font(.system(size: 22))
-                    .foregroundStyle(.tertiary)
-                Text("No snapshots yet — Take Snapshot from the toolbar to capture one.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
+
+    @ViewBuilder
+    private func machineRow(_ machine: String) -> some View {
+        let isMe = machine == state.machineId
+        let count = state.snapshotsForMachine(machine).count
+
+        HStack(spacing: 6) {
+            Image(systemName: isMe ? "desktopcomputer" : "laptopcomputer")
+                .font(.system(size: 11))
+                .foregroundStyle(isMe ? Color.indigo : Color.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 4) {
+                    Text(machine)
+                        .font(.system(size: 12, weight: isMe ? .semibold : .regular))
+                        .lineLimit(1)
+                    if isMe {
+                        Text("(this)")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.indigo)
+                    }
+                }
+                Text("\(count) snapshot\(count == 1 ? "" : "s")")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 1)
+    }
+
+    // MARK: - Snapshot detail (right)
+
+    private var activeMachine: String {
+        state.drawerMachineId ?? state.machineId
+    }
+
+    private var machineSnapshots: [SidebarSnapshot] {
+        state.snapshotsForMachine(activeMachine)
+    }
+
+    @ViewBuilder
+    private var snapshotDetail: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("SNAPSHOTS FROM \(activeMachine.uppercased())")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
+            .padding(.bottom, 4)
+
+            if machineSnapshots.isEmpty {
+                VStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 22))
+                        .foregroundStyle(.tertiary)
+                    Text("No snapshots from \(activeMachine)")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                    if activeMachine == state.machineId {
+                        Text("Use Take Snapshot in the toolbar to capture one.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(selection: Binding(
+                    get: { state.drawerSnapshotId },
+                    set: { state.drawerSnapshotId = $0 }
+                )) {
+                    ForEach(machineSnapshots) { snap in
+                        snapshotCard(snap)
+                            .tag(snap.id as String?)
+                    }
+                }
+                .listStyle(.inset)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func snapshotCard(_ snap: SidebarSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.indigo)
+                Text(snap.name)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                Spacer()
+                Text("\(snap.items.count) items")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            }
+
+            Text(snap.timestamp, format: .dateTime.month().day().year().hour().minute())
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+
+            // Item preview (first 6)
+            VStack(alignment: .leading, spacing: 1) {
+                ForEach(Array(snap.items.prefix(6).enumerated()), id: \.offset) { _, item in
+                    HStack(spacing: 5) {
+                        Image(systemName: "folder")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.tertiary)
+                        Text(item.name)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                }
+                if snap.items.count > 6 {
+                    Text("…and \(snap.items.count - 6) more")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                        .padding(.leading, 14)
+                }
+            }
+            .padding(.leading, 4)
+        }
+        .padding(.vertical, 4)
+    }
+
+    // MARK: - Footer actions
 
     private var selectedSnapshot: SidebarSnapshot? {
-        if let id = state.drawerSnapshotId,
-           let snap = state.allSnapshots.first(where: { $0.id == id }) {
-            return snap
-        }
-        return state.allSnapshots.first
+        guard let id = state.drawerSnapshotId else { return nil }
+        return machineSnapshots.first { $0.id == id }
     }
-
-    // MARK: - Footer — Apply / Save Uniques / Trash
 
     @ViewBuilder
     private var footer: some View {
@@ -150,13 +261,13 @@ struct SnapshotDrawerView: View {
                     state.showSnapshotDrawer = false
                 }
             } label: {
-                Label("Apply to Pending", systemImage: "square.and.arrow.down")
+                Label("Replace Pending", systemImage: "square.and.arrow.down")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
             .disabled(selectedSnapshot == nil)
-            .help("Replace Pending with this snapshot's items (does NOT touch Finder)")
+            .help("Replace Pending with this snapshot's items (Finder is NOT touched)")
 
             Button {
                 if let snap = selectedSnapshot {
@@ -168,7 +279,7 @@ struct SnapshotDrawerView: View {
             .buttonStyle(.bordered)
             .controlSize(.regular)
             .disabled(selectedSnapshot == nil)
-            .help("Add items not yet in Library to the Library")
+            .help("Add items not yet in Library to the Library (keeps Pending unchanged)")
 
             Button(role: .destructive) {
                 if let snap = selectedSnapshot {
@@ -181,7 +292,7 @@ struct SnapshotDrawerView: View {
             .buttonStyle(.bordered)
             .controlSize(.regular)
             .disabled(selectedSnapshot == nil)
-            .help("Delete this snapshot")
+            .help("Delete this snapshot from the cloud")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
