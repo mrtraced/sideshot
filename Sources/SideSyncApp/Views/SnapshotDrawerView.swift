@@ -27,14 +27,17 @@ struct SnapshotDrawerView: View {
             footer
         }
         .background(
-            LinearGradient(
-                colors: [
-                    Color.indigo.opacity(0.10),
-                    Color.indigo.opacity(0.04)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            ZStack {
+                Color(nsColor: .windowBackgroundColor)
+                LinearGradient(
+                    colors: [
+                        Color.indigo.opacity(0.14),
+                        Color.indigo.opacity(0.04)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
         )
         .overlay(
             Rectangle()
