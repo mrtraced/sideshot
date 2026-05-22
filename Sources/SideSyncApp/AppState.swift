@@ -35,6 +35,13 @@ class AppState {
     var showDeletePendingConfirm: Bool = false
     var showApplyPendingConfirm: Bool = false
 
+    // Snapshot drawer + Edit pane source tracking
+    enum EditSource { case none, pending, library }
+    var editPaneSource: EditSource = .none
+    var showSnapshotDrawer: Bool = false
+    /// Snapshot currently being previewed/applied in the drawer.
+    var drawerSnapshotId: String?
+
     // Role change confirmation
     var showRoleChangeConfirm: Bool = false
     var pendingRole: SyncRole?
@@ -403,6 +410,70 @@ class AppState {
             refresh()
         } catch {
             errorMessage = "Failed to remove: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Snapshot drawer actions
+
+    /// Replace pending with the contents of a snapshot (no Finder write).
+    func loadSnapshotIntoPending(_ snapshot: SidebarSnapshot) {
+        let mapped = snapshot.items.map { item -> PendingItem in
+            // Link to library if a match exists by trailing path component.
+            let linkedId = libraryItem(matchingPath: item.path)?.id
+            return PendingItem(
+                name: item.name,
+                path: item.path,
+                libraryItemId: linkedId
+            )
+        }
+        pending = mapped
+        selectedPendingItemId = nil
+        editPaneSource = .none
+        statusMessage = "Loaded \"\(snapshot.name)\" into pending (\(mapped.count) items)"
+    }
+
+    /// Add any snapshot items not already in Library to Library (by dedup key).
+    func saveSnapshotUniquesToLibrary(_ snapshot: SidebarSnapshot) {
+        var cloudData = cloud ?? CloudFavorites(
+            lastUpdatedBy: machineId,
+            lastUpdatedAt: Date(),
+            favorites: []
+        )
+
+        var added = 0
+        let nextBaseOrder = (cloudData.favorites.map(\.order).max() ?? -1) + 1
+        for (offset, item) in snapshot.items.enumerated() {
+            let key = libraryDedupKey(forPath: item.path)
+            if config.ignoredLibraryKeys.contains(key) { continue }
+            if cloudData.favorites.contains(where: { fav in
+                let favKey = libraryDedupKey(forPath: fav.paths[machineId] ?? "")
+                return favKey == key || fav.pathHints.last?.lowercased() == key
+            }) {
+                continue
+            }
+            let fav = CloudFavorite(
+                id: UUID().uuidString,
+                name: item.name,
+                pathHints: CloudFavorite.buildPathHints(from: item.path),
+                order: nextBaseOrder + offset,
+                paths: [snapshot.machineId: item.path]
+            )
+            cloudData.favorites.append(fav)
+            added += 1
+        }
+
+        if added > 0 {
+            cloudData.lastUpdatedBy = machineId
+            cloudData.lastUpdatedAt = Date()
+            do {
+                try cloudService.write(cloudData)
+                statusMessage = "Saved \(added) unique item\(added == 1 ? "" : "s") to Library"
+                refresh()
+            } catch {
+                errorMessage = "Failed to save uniques: \(error.localizedDescription)"
+            }
+        } else {
+            statusMessage = "No new items to save — all already in Library"
         }
     }
 

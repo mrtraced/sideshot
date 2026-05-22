@@ -9,14 +9,22 @@ struct ContentView: View {
 
         NavigationSplitView(columnVisibility: .constant(.all)) {
             SidebarView()
-                .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 280)
+                .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
         } content: {
-            PendingPaneView()
-                .navigationSplitViewColumnWidth(min: 260, ideal: 340, max: 480)
+            ZStack(alignment: .bottom) {
+                PendingPaneView()
+                if state.showSnapshotDrawer {
+                    SnapshotDrawerView()
+                        .transition(.move(edge: .bottom))
+                        .zIndex(1)
+                }
+            }
+            .animation(.easeInOut(duration: 0.22), value: state.showSnapshotDrawer)
+            .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
         } detail: {
             VSplitView {
                 EditPaneView()
-                    .frame(minHeight: 120, idealHeight: 180)
+                    .frame(minHeight: 160, idealHeight: 220)
 
                 LibraryPaneView()
                     .frame(minHeight: 200)

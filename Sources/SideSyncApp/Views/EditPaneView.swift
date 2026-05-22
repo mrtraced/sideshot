@@ -1,95 +1,143 @@
 import SwiftUI
+import AppKit
 import SideSyncLib
 
-/// Right-top — Edit pane for the currently-selected Pending item.
-/// P1: read-only display. Name/path become editable in P2.
+/// Right-top — Edit pane.
+/// Polymorphic: when a Pending row was last clicked, shows pending edit.
+/// When a Library tile was last clicked, shows full cloud-favorite editor
+/// (machine paths, set-path, hide/unhide, remove from cloud).
 struct EditPaneView: View {
     @Environment(AppState.self) private var state
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Image(systemName: "pencil")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                Text("Edit Item")
-                    .font(.system(size: 12, weight: .semibold))
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.bar)
+            header
 
             Divider()
 
+            content
+        }
+    }
+
+    @ViewBuilder
+    private var header: some View {
+        HStack {
+            Image(systemName: "pencil")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Text(headerTitle)
+                .font(.system(size: 12, weight: .semibold))
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.bar)
+    }
+
+    private var headerTitle: String {
+        switch state.editPaneSource {
+        case .pending: return "Edit Pending Item"
+        case .library: return "Edit Library Item"
+        case .none: return "Edit Item"
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch state.editPaneSource {
+        case .pending:
             if let item = state.selectedPendingItem {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        field(label: "Name", value: item.name)
-                        field(label: "Path (this machine)", value: item.path, monospaced: true)
+                PendingItemEditor(item: item)
+            } else {
+                empty
+            }
+        case .library:
+            if let item = state.selectedCloudFavorite {
+                LibraryItemEditor(favorite: item)
+            } else {
+                empty
+            }
+        case .none:
+            empty
+        }
+    }
 
-                        // Icon slot — deferred
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Icon")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            HStack {
-                                Image(systemName: "folder.fill")
-                                    .foregroundStyle(.blue)
-                                Text("Customize (coming soon)")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .padding(6)
-                            .background(.quaternary)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                        }
+    @ViewBuilder
+    private var empty: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "cursorarrow.click")
+                .font(.system(size: 22))
+                .foregroundStyle(.tertiary)
+            Text("Select an item to edit")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
 
-                        // Also on — read from cloud
-                        if let linkedId = item.libraryItemId,
-                           let libItem = state.cloud?.favorites.first(where: { $0.id == linkedId }) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Also on")
-                                    .font(.caption)
+// MARK: - Pending editor (light)
+
+private struct PendingItemEditor: View {
+    @Environment(AppState.self) private var state
+    let item: PendingItem
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: item.libraryItemId != nil ? "link.circle.fill" : "folder.fill")
+                        .foregroundStyle(item.libraryItemId != nil ? Color.accentColor : Color.blue)
+                        .font(.system(size: 22))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.name)
+                            .font(.system(size: 14, weight: .semibold))
+                        Text(item.libraryItemId != nil ? "Linked to Library" : "Independent (not in Library)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+
+                Divider()
+
+                field(label: "Name", value: item.name)
+                field(label: "Path (this machine)", value: item.path, monospaced: true)
+
+                // Linked-to-library cross-machine paths
+                if let linkedId = item.libraryItemId,
+                   let libItem = state.cloud?.favorites.first(where: { $0.id == linkedId }) {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("ALSO ON")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                        ForEach(libItem.paths.keys.sorted(), id: \.self) { machine in
+                            HStack(spacing: 6) {
+                                Image(systemName: "laptopcomputer")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(machine == state.machineId ? Color.green : Color.gray)
+                                Text(machine)
+                                    .font(.system(size: 11, weight: .medium))
+                                Text(libItem.paths[machine] ?? "")
+                                    .font(.system(size: 10, design: .monospaced))
                                     .foregroundStyle(.secondary)
-                                ForEach(libItem.paths.keys.sorted(), id: \.self) { machine in
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "laptopcomputer")
-                                            .font(.system(size: 10))
-                                            .foregroundStyle(.tertiary)
-                                        Text(machine)
-                                            .font(.system(size: 11, weight: .medium))
-                                        Text(libItem.paths[machine] ?? "")
-                                            .font(.system(size: 10, design: .monospaced))
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                            .truncationMode(.middle)
-                                    }
-                                }
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
                             }
                         }
                     }
-                    .padding(12)
                 }
-            } else {
-                VStack(spacing: 6) {
-                    Image(systemName: "cursorarrow.click")
-                        .font(.system(size: 22))
-                        .foregroundStyle(.tertiary)
-                    Text("Select a pending item to edit")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .padding(12)
         }
     }
 
     @ViewBuilder
     private func field(label: String, value: String, monospaced: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label)
-                .font(.caption)
+            Text(label.uppercased())
+                .font(.system(size: 9))
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.system(size: 12, design: monospaced ? .monospaced : .default))
@@ -97,5 +145,259 @@ struct EditPaneView: View {
                 .lineLimit(2)
                 .truncationMode(.middle)
         }
+    }
+}
+
+// MARK: - Library editor (restored cloud-favorite preview)
+
+private struct LibraryItemEditor: View {
+    @Environment(AppState.self) private var state
+    let favorite: CloudFavorite
+
+    @State private var editingPath: String = ""
+    @State private var isEditingPath: Bool = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                headerRow
+                pathHintsBlock
+                machinePathsBlock
+                Divider()
+                actionsBlock
+            }
+            .padding(16)
+        }
+    }
+
+    @ViewBuilder
+    private var headerRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "folder.fill")
+                .font(.system(size: 28))
+                .foregroundStyle(.blue)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(favorite.name)
+                    .font(.system(size: 15, weight: .semibold))
+                let status = state.status(for: favorite)
+                HStack(spacing: 4) {
+                    Text(status.icon)
+                        .font(.system(size: 11))
+                    Text(status.label)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private var pathHintsBlock: some View {
+        if !favorite.pathHints.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("PATH HINTS")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    ForEach(favorite.pathHints, id: \.self) { hint in
+                        Text(hint)
+                            .font(.system(size: 11, design: .monospaced))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.quaternary)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var machinePathsBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("MACHINE PATHS")
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+
+            ForEach(favorite.paths.keys.sorted(), id: \.self) { machine in
+                PathRow(
+                    machineName: machine,
+                    path: favorite.paths[machine] ?? "",
+                    isCurrent: machine == state.machineId,
+                    pathExists: PathResolver.exists(favorite.paths[machine] ?? "")
+                )
+            }
+
+            if favorite.paths[state.machineId] == nil {
+                setPathRow
+            }
+
+            if let override = state.config.pathOverrides[favorite.id] {
+                HStack(spacing: 4) {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.yellow)
+                    Text("Override: \(override)")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var setPathRow: some View {
+        if isEditingPath {
+            HStack(spacing: 6) {
+                TextField("Enter local path...", text: $editingPath)
+                    .font(.system(size: 11, design: .monospaced))
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(commitPath)
+                Button {
+                    pickFolder()
+                } label: { Image(systemName: "folder") }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                Button("Save", action: commitPath)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                Button("Cancel") {
+                    isEditingPath = false
+                    editingPath = ""
+                }
+                .controlSize(.small)
+            }
+        } else {
+            HStack(spacing: 8) {
+                if let suggested = state.suggestedPath(for: favorite) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Suggested:")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                        Text(suggested)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.blue)
+                    }
+                    Button("Use") {
+                        state.updatePath(for: favorite, path: suggested)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+                Button {
+                    pickFolder()
+                } label: {
+                    Label("Browse…", systemImage: "folder")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.blue)
+                Button {
+                    isEditingPath = true
+                } label: {
+                    Label("Type…", systemImage: "pencil")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func commitPath() {
+        guard !editingPath.isEmpty else { return }
+        state.updatePath(for: favorite, path: editingPath)
+        isEditingPath = false
+        editingPath = ""
+    }
+
+    private func pickFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose the local folder for \"\(favorite.name)\""
+        panel.prompt = "Select"
+        if let hint = favorite.paths.values.first {
+            let parent = URL(fileURLWithPath: hint).deletingLastPathComponent()
+            if FileManager.default.fileExists(atPath: parent.path) {
+                panel.directoryURL = parent
+            }
+        }
+        if panel.runModal() == .OK, let url = panel.url {
+            state.updatePath(for: favorite, path: url.path)
+        }
+    }
+
+    @ViewBuilder
+    private var actionsBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("ACTIONS")
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Button {
+                    addToPending()
+                } label: {
+                    Label("Add to Pending", systemImage: "plus.circle")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(isInPending)
+
+                if state.config.hiddenFavorites.contains(favorite.id) {
+                    Button {
+                        state.unhideFavorite(favorite)
+                    } label: {
+                        Label("Unhide", systemImage: "eye")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                } else {
+                    Button {
+                        state.hideFavorite(favorite)
+                    } label: {
+                        Label("Hide", systemImage: "eye.slash")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+
+                Button(role: .destructive) {
+                    state.removeFromLibrary(favorite)
+                } label: {
+                    Label("Remove from Library", systemImage: "trash")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+    }
+
+    private var isInPending: Bool {
+        state.pending.contains(where: { $0.libraryItemId == favorite.id })
+    }
+
+    private func addToPending() {
+        guard let path = PathResolver.resolveLocalPath(
+            for: favorite, machineId: state.machineId, config: state.config
+        ) ?? favorite.paths[state.machineId] else {
+            state.errorMessage = "No usable local path for \"\(favorite.name)\""
+            return
+        }
+        var newPending = state.pending
+        newPending.append(PendingItem(
+            name: favorite.name,
+            path: path,
+            libraryItemId: favorite.id
+        ))
+        state.pending = newPending
+        state.statusMessage = "Added \"\(favorite.name)\" to pending"
     }
 }

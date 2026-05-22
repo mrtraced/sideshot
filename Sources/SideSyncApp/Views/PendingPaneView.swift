@@ -45,7 +45,10 @@ struct PendingPaneView: View {
             } else {
                 List(selection: Binding(
                     get: { state.selectedPendingItemId },
-                    set: { state.selectedPendingItemId = $0 }
+                    set: { newId in
+                        state.selectedPendingItemId = newId
+                        if newId != nil { state.editPaneSource = .pending }
+                    }
                 )) {
                     ForEach(state.pending) { item in
                         PendingRow(item: item)
@@ -55,20 +58,6 @@ struct PendingPaneView: View {
                 .listStyle(.inset)
             }
 
-            // Footer placeholder — snapshot drawer trigger lands in P3.
-            Divider()
-            HStack {
-                Image(systemName: "rectangle.stack")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
-                Text("Snapshots (coming in P3)")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.bar.opacity(0.5))
         }
     }
 }

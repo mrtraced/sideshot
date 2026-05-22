@@ -6,20 +6,25 @@ struct SideSyncToolbar: SwiftUI.ToolbarContent {
     @Environment(AppState.self) private var state
 
     var body: some SwiftUI.ToolbarContent {
-        // Left — machine name as plain text
+        // Left — machine identity (plain text, not a chip)
         ToolbarItem(placement: .navigation) {
-            Button {
-                state.showMachinesBrowser = true
-            } label: {
-                Text(state.machineId)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.primary)
-            }
-            .buttonStyle(.plain)
-            .help("Browse machines and snapshot history")
+            Text(state.machineId)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 4)
         }
 
-        // Right — individual buttons, with a spacer/divider before Apply
+        // Left — cloud button: opens snapshot drawer
+        ToolbarItem(placement: .navigation) {
+            Button {
+                state.showSnapshotDrawer.toggle()
+            } label: {
+                Label("Snapshots", systemImage: state.showSnapshotDrawer ? "icloud.fill" : "icloud")
+            }
+            .help("Browse saved sidebar snapshots and load one into Pending")
+        }
+
+        // Right — individual action buttons
         ToolbarItem(placement: .primaryAction) {
             Button {
                 state.showSaveSnapshotSheet = true

@@ -1,10 +1,11 @@
 import SwiftUI
 import SideSyncLib
 
-/// Right-bottom — Item Library: flat pool of reusable items.
-/// P1: read-only list. Drag-to-Pending and right-click actions arrive in P2/P3.
+/// Right-bottom — Item Library: flat pool of reusable items as a tile grid.
 struct LibraryPaneView: View {
     @Environment(AppState.self) private var state
+
+    private let tileSize = CGSize(width: 140, height: 70)
 
     var body: some View {
         VStack(spacing: 0) {
@@ -36,52 +37,73 @@ struct LibraryPaneView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(selection: Binding(
-                    get: { state.selectedCloudFavorite?.id },
-                    set: { newId in
-                        state.selectedCloudFavorite = newId.flatMap { id in
-                            state.libraryItems.first { $0.id == id }
+                ScrollView {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: tileSize.width, maximum: tileSize.width + 30), spacing: 10)],
+                        spacing: 10
+                    ) {
+                        ForEach(state.libraryItems) { item in
+                            LibraryTile(item: item, size: tileSize)
                         }
                     }
-                )) {
-                    ForEach(state.libraryItems) { item in
-                        LibraryRow(item: item)
-                            .tag(item.id as String?)
-                            .contextMenu {
-                                Button(role: .destructive) {
-                                    state.removeFromLibrary(item)
-                                } label: {
-                                    Label("Remove from Library", systemImage: "trash")
-                                }
-                            }
-                    }
+                    .padding(10)
                 }
-                .listStyle(.inset)
             }
         }
     }
 }
 
-private struct LibraryRow: View {
+private struct LibraryTile: View {
+    @Environment(AppState.self) private var state
     let item: CloudFavorite
+    let size: CGSize
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "folder")
-                .foregroundStyle(.secondary)
-                .font(.system(size: 12))
-            VStack(alignment: .leading, spacing: 1) {
+        let isSelected = state.selectedCloudFavorite?.id == item.id && state.editPaneSource == .library
+        let fullPath = item.paths[state.machineId] ?? item.paths.values.first ?? item.pathHints.joined(separator: "/")
+
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Image(systemName: "folder.fill")
+                    .foregroundStyle(.blue.opacity(0.85))
+                    .font(.system(size: 14))
                 Text(item.name)
-                    .font(.system(size: 12))
+                    .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
-                if !item.pathHints.isEmpty {
-                    Text(item.pathHints.joined(separator: " / "))
-                        .font(.system(size: 9))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
+                Spacer(minLength: 0)
+            }
+            Spacer(minLength: 0)
+            Text(item.pathHints.last ?? "")
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .padding(8)
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isSelected ? Color.accentColor.opacity(0.18) : Color.gray.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(
+                    isSelected ? Color.accentColor : Color.gray.opacity(0.25),
+                    lineWidth: isSelected ? 1.5 : 1
+                )
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 8))
+        .onTapGesture {
+            state.selectedCloudFavorite = item
+            state.editPaneSource = .library
+        }
+        .contextMenu {
+            Button(role: .destructive) {
+                state.removeFromLibrary(item)
+            } label: {
+                Label("Remove from Library", systemImage: "trash")
             }
         }
-        .padding(.vertical, 1)
+        .help(fullPath)
     }
 }
