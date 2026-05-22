@@ -60,22 +60,30 @@ private struct LibraryTile: View {
 
     var body: some View {
         let isSelected = state.selectedCloudFavorite?.id == item.id && state.editPaneSource == .library
+        let inUse = state.isInPending(libraryItemId: item.id)
         let fullPath = item.paths[state.machineId] ?? item.paths.values.first ?? item.pathHints.joined(separator: "/")
 
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
                 Image(systemName: "folder.fill")
-                    .foregroundStyle(.blue.opacity(0.85))
+                    .foregroundStyle(inUse ? Color.gray.opacity(0.55) : Color.blue.opacity(0.85))
                     .font(.system(size: 14))
                 Text(item.name)
                     .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(inUse ? .secondary : .primary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
+                if inUse {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .help("In use in Pending")
+                }
             }
             Spacer(minLength: 0)
             Text(item.pathHints.last ?? "")
                 .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.tertiary)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
@@ -83,15 +91,20 @@ private struct LibraryTile: View {
         .frame(width: size.width, height: size.height, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? Color.accentColor.opacity(0.18) : Color.gray.opacity(0.10))
+                .fill(
+                    isSelected ? Color.accentColor.opacity(0.18)
+                    : inUse ? Color.gray.opacity(0.06)
+                    : Color.gray.opacity(0.10)
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(
-                    isSelected ? Color.accentColor : Color.gray.opacity(0.25),
-                    lineWidth: isSelected ? 1.5 : 1
+                    isSelected ? Color.accentColor : Color.gray.opacity(0.22),
+                    style: StrokeStyle(lineWidth: isSelected ? 1.5 : 1, dash: inUse ? [3, 2] : [])
                 )
         )
+        .opacity(inUse ? 0.65 : 1.0)
         .contentShape(RoundedRectangle(cornerRadius: 8))
         .onTapGesture {
             state.selectedCloudFavorite = item
@@ -104,6 +117,6 @@ private struct LibraryTile: View {
                 Label("Remove from Library", systemImage: "trash")
             }
         }
-        .help(fullPath)
+        .quickHelp(inUse ? "\(fullPath)  •  In use in Pending" : fullPath)
     }
 }

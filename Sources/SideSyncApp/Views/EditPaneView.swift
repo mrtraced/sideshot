@@ -47,7 +47,14 @@ struct EditPaneView: View {
         switch state.editPaneSource {
         case .pending:
             if let item = state.selectedPendingItem {
-                PendingItemEditor(item: item)
+                // Unified: if the pending item is linked to a library entry,
+                // show the rich library editor (one record across views).
+                if let linkedId = item.libraryItemId,
+                   let lib = state.cloud?.favorites.first(where: { $0.id == linkedId }) {
+                    LibraryItemEditor(favorite: lib)
+                } else {
+                    PendingItemEditor(item: item)
+                }
             } else {
                 empty
             }
@@ -179,13 +186,25 @@ private struct LibraryItemEditor: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(favorite.name)
                     .font(.system(size: 15, weight: .semibold))
-                let status = state.status(for: favorite)
-                HStack(spacing: 4) {
-                    Text(status.icon)
-                        .font(.system(size: 11))
-                    Text(status.label)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    if isInPending {
+                        HStack(spacing: 3) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.green)
+                            Text("In Pending")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Color.green.opacity(0.12))
+                        .clipShape(Capsule())
+                    } else {
+                        Text("Library only")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             Spacer()
@@ -338,15 +357,25 @@ private struct LibraryItemEditor: View {
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 8) {
-                Button {
-                    addToPending()
-                } label: {
-                    Label("Add to Pending", systemImage: "plus.circle")
-                        .font(.system(size: 11))
+                if isInPending {
+                    Button(role: .destructive) {
+                        removeFromPending()
+                    } label: {
+                        Label("Remove from Pending", systemImage: "minus.circle")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                } else {
+                    Button {
+                        addToPending()
+                    } label: {
+                        Label("Add to Pending", systemImage: "plus.circle")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .disabled(isInPending)
 
                 if state.config.hiddenFavorites.contains(favorite.id) {
                     Button {
@@ -381,7 +410,7 @@ private struct LibraryItemEditor: View {
     }
 
     private var isInPending: Bool {
-        state.pending.contains(where: { $0.libraryItemId == favorite.id })
+        state.isInPending(libraryItemId: favorite.id)
     }
 
     private func addToPending() {
@@ -399,5 +428,16 @@ private struct LibraryItemEditor: View {
         ))
         state.pending = newPending
         state.statusMessage = "Added \"\(favorite.name)\" to pending"
+    }
+
+    private func removeFromPending() {
+        var newPending = state.pending
+        newPending.removeAll { $0.libraryItemId == favorite.id }
+        state.pending = newPending
+        if let id = state.selectedPendingItemId,
+           !newPending.contains(where: { $0.id == id }) {
+            state.selectedPendingItemId = nil
+        }
+        state.statusMessage = "Removed \"\(favorite.name)\" from pending"
     }
 }

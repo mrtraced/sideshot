@@ -71,11 +71,85 @@ class AppState {
 
         refresh()
         autoImportCurrentToLibrary()
+        linkPendingToLibrary()
 
         // First-run init: seed pending from Current if it's empty.
         if config.pending.isEmpty && !localFavorites.isEmpty {
             resetPendingToCurrent()
         }
+    }
+
+    /// Ensure or create a Library entry for the given name+path, and return its id.
+    /// Library is the canonical record store; Pending and snapshots reference it.
+    @discardableResult
+    func ensureLibraryEntry(name: String, path: String) -> String? {
+        let key = libraryDedupKey(forPath: path)
+        if let existing = cloud?.favorites.first(where: { fav in
+            let favKey = libraryDedupKey(forPath: fav.paths[machineId] ?? "")
+            return favKey == key || fav.pathHints.last?.lowercased() == key
+        }) {
+            // Refresh this machine's path mapping if it changed.
+            if cloud?.favorites.first(where: { $0.id == existing.id })?.paths[machineId] != path {
+                if var cloudData = cloud,
+                   let idx = cloudData.favorites.firstIndex(where: { $0.id == existing.id }) {
+                    cloudData.favorites[idx].paths[machineId] = path
+                    cloudData.lastUpdatedBy = machineId
+                    cloudData.lastUpdatedAt = Date()
+                    try? cloudService.write(cloudData)
+                    cloud = cloudData
+                }
+            }
+            return existing.id
+        }
+
+        // Not in Library — create it.
+        var cloudData = cloud ?? CloudFavorites(
+            lastUpdatedBy: machineId,
+            lastUpdatedAt: Date(),
+            favorites: []
+        )
+        let nextOrder = (cloudData.favorites.map(\.order).max() ?? -1) + 1
+        let newItem = CloudFavorite(
+            id: UUID().uuidString,
+            name: name,
+            pathHints: CloudFavorite.buildPathHints(from: path),
+            order: nextOrder,
+            paths: [machineId: path]
+        )
+        cloudData.favorites.append(newItem)
+        cloudData.lastUpdatedBy = machineId
+        cloudData.lastUpdatedAt = Date()
+        do {
+            try cloudService.write(cloudData)
+            cloud = cloudData
+            return newItem.id
+        } catch {
+            return nil
+        }
+    }
+
+    /// One-shot migration: for any Pending item without a libraryItemId, find or
+    /// create a Library match by last-path-component so the three views all
+    /// share one canonical record.
+    func linkPendingToLibrary() {
+        var changed = false
+        var newPending = config.pending
+        for i in newPending.indices {
+            guard newPending[i].libraryItemId == nil else { continue }
+            if let libId = ensureLibraryEntry(name: newPending[i].name, path: newPending[i].path) {
+                newPending[i].libraryItemId = libId
+                changed = true
+            }
+        }
+        if changed {
+            config.pending = newPending
+            try? configService.write(config)
+        }
+    }
+
+    /// True if a Library item is currently in Pending (by libraryItemId reference).
+    func isInPending(libraryItemId: String) -> Bool {
+        pending.contains(where: { $0.libraryItemId == libraryItemId })
     }
 
     // MARK: - Actions
@@ -308,10 +382,13 @@ class AppState {
         }
     }
 
-    /// Replace pending with the live Finder sidebar contents (items are independent).
+    /// Replace pending with the live Finder sidebar contents.
+    /// Each item is linked to a Library entry (creating one if needed) so
+    /// the record is unified across Current, Pending, and Library.
     func resetPendingToCurrent() {
-        let mapped = localFavorites.map {
-            PendingItem(name: $0.name, path: $0.path, libraryItemId: nil)
+        let mapped = localFavorites.map { fav in
+            let libId = ensureLibraryEntry(name: fav.name, path: fav.path)
+            return PendingItem(name: fav.name, path: fav.path, libraryItemId: libId)
         }
         pending = mapped
         selectedPendingItemId = nil
@@ -418,14 +495,15 @@ class AppState {
     // MARK: - Snapshot drawer actions
 
     /// Replace pending with the contents of a snapshot (no Finder write).
+    /// Each item is linked to a Library entry (creating one if needed) so
+    /// the record is unified across Current, Pending, and Library.
     func loadSnapshotIntoPending(_ snapshot: SidebarSnapshot) {
         let mapped = snapshot.items.map { item -> PendingItem in
-            // Link to library if a match exists by trailing path component.
-            let linkedId = libraryItem(matchingPath: item.path)?.id
+            let libId = ensureLibraryEntry(name: item.name, path: item.path)
             return PendingItem(
                 name: item.name,
                 path: item.path,
-                libraryItemId: linkedId
+                libraryItemId: libId
             )
         }
         pending = mapped
