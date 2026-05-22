@@ -7,6 +7,16 @@ struct ContentView: View {
     var body: some View {
         @Bindable var state = state
 
+        VStack(spacing: 0) {
+            splitView
+            statusBar
+        }
+    }
+
+    @ViewBuilder
+    private var splitView: some View {
+        @Bindable var state = state
+
         NavigationSplitView(columnVisibility: .constant(.all)) {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
@@ -76,9 +86,6 @@ struct ContentView: View {
         } message: {
             Text("This will land in Phase 2 — wired in next round.")
         }
-        .overlay(alignment: .bottom) {
-            statusBar
-        }
     }
 
     @ViewBuilder
@@ -99,11 +106,16 @@ struct ContentView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
             .background(.bar)
+            .overlay(Divider(), alignment: .top)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                    state.statusMessage = nil
-                    state.errorMessage = nil
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        state.statusMessage = nil
+                        state.errorMessage = nil
+                    }
                 }
             }
         }
