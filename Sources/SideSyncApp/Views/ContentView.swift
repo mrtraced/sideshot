@@ -12,16 +12,14 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
         } content: {
             ZStack {
+                PendingPaneView()
                 if state.showSnapshotDrawer {
                     SnapshotDrawerView()
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .transition(.move(edge: .bottom))
                         .zIndex(1)
-                } else {
-                    PendingPaneView()
-                        .transition(.opacity)
                 }
             }
-            .animation(.easeInOut(duration: 0.22), value: state.showSnapshotDrawer)
+            .animation(.easeInOut(duration: 0.32), value: state.showSnapshotDrawer)
             .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
         } detail: {
             VSplitView {
