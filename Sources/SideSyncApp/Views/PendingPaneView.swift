@@ -67,15 +67,55 @@ private struct PendingRow: View {
     let item: PendingItem
 
     var body: some View {
+        let exists = PathResolver.exists(item.path)
+        let inCurrent = state.localFavorites.contains(where: { sameItem($0.path, item.path) })
+        let isLinked = item.libraryItemId != nil
+
         HStack(spacing: 8) {
-            Image(systemName: item.libraryItemId != nil ? "link.circle.fill" : "folder.fill")
-                .foregroundStyle(item.libraryItemId != nil ? Color.accentColor : Color.blue)
+            Image(systemName: "folder.fill")
+                .foregroundStyle(Color.blue)
                 .font(.system(size: 14))
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(item.name)
-                    .font(.system(size: 13))
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(item.name)
+                        .font(.system(size: 13))
+                        .lineLimit(1)
+
+                    // Path existence — most important: will Apply actually work?
+                    if exists {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.green)
+                            .help("Path exists on this machine")
+                    } else {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.red)
+                            .help("Path missing — Apply will skip this item")
+                    }
+
+                    // Already in Current — applying won't change this entry
+                    if inCurrent {
+                        Image(systemName: "sidebar.left")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.gray)
+                            .help("Already in Current Sidebar")
+                    }
+
+                    // Library linkage — edits propagate cross-machine
+                    if isLinked {
+                        Image(systemName: "link")
+                            .font(.system(size: 9))
+                            .foregroundStyle(Color.accentColor)
+                            .help("Linked to Library — edits sync via cloud")
+                    } else {
+                        Image(systemName: "link.badge.plus")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.tertiary)
+                            .help("Independent — not linked to Library")
+                    }
+                }
                 Text(abbreviatePath(item.path))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
@@ -83,6 +123,13 @@ private struct PendingRow: View {
             }
         }
         .padding(.vertical, 1)
+        .help(item.path)
+    }
+
+    private func sameItem(_ a: String, _ b: String) -> Bool {
+        let na = a.hasSuffix("/") ? String(a.dropLast()) : a
+        let nb = b.hasSuffix("/") ? String(b.dropLast()) : b
+        return na == nb
     }
 
     private func abbreviatePath(_ path: String) -> String {
