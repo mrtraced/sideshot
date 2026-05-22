@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Swift build output
+.build/
+.swiftpm/
+*.xcodeproj/
+Package.pins
+
+# App bundle (regenerable via build-app.sh)
+SideSync.app/
+
+# Generated icon set (regenerable from icon-raw.png)
+AppIcon.iconset/
+
+# Editor / IDE
+.vscode/
+*.xcuserstate
+xcuserdata/
+
+# Local-only Claude Code settings (per-machine permissions)
+.claude/
