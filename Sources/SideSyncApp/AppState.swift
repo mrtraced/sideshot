@@ -73,6 +73,7 @@ class AppState {
 
         refresh()
         autoImportCurrentToLibrary()
+        seedLibraryDefaults()
         linkPendingToLibrary()
 
         // First-run init: seed pending from Current if it's empty.
@@ -464,6 +465,56 @@ class AppState {
             cloudData.lastUpdatedAt = Date()
             try? cloudService.write(cloudData)
             cloud = cloudData
+        }
+    }
+
+    /// Standard macOS locations worth surfacing in the Library even when the user
+    /// hasn't added them to their Finder sidebar. Only added if the path exists on
+    /// this machine and isn't already in the Library (by name or trailing path
+    /// component) and isn't in the ignored set.
+    func seedLibraryDefaults() {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let candidates: [(name: String, path: String)] = [
+            ("Home",         home),
+            ("Desktop",      "\(home)/Desktop"),
+            ("Documents",    "\(home)/Documents"),
+            ("Downloads",    "\(home)/Downloads"),
+            ("Movies",       "\(home)/Movies"),
+            ("Music",        "\(home)/Music"),
+            ("Pictures",     "\(home)/Pictures"),
+            ("Public",       "\(home)/Public"),
+            ("Library",      "\(home)/Library"),
+            ("iCloud Drive", "\(home)/Library/Mobile Documents/com~apple~CloudDocs"),
+            ("Applications", "/Applications"),
+            ("Utilities",    "/Applications/Utilities"),
+        ]
+
+        let existingNames = Set((cloud?.favorites ?? []).map { $0.name.lowercased() })
+        var added = 0
+
+        for (name, path) in candidates {
+            guard FileManager.default.fileExists(atPath: path) else { continue }
+            if existingNames.contains(name.lowercased()) { continue }
+            let key = libraryDedupKey(forPath: path)
+            if config.ignoredLibraryKeys.contains(key) { continue }
+            // ensureLibraryEntry handles last-path-component dedup against cloud
+            // and creates a new entry only when neither name nor path key matches.
+            let beforeId = cloud?.favorites.first(where: { fav in
+                let favKey = libraryDedupKey(forPath: fav.paths[machineId] ?? "")
+                return favKey == key || fav.pathHints.last?.lowercased() == key
+            })?.id
+            _ = ensureLibraryEntry(name: name, path: path)
+            let afterId = cloud?.favorites.first(where: { fav in
+                let favKey = libraryDedupKey(forPath: fav.paths[machineId] ?? "")
+                return favKey == key || fav.pathHints.last?.lowercased() == key
+            })?.id
+            if beforeId == nil && afterId != nil {
+                added += 1
+            }
+        }
+
+        if added > 0 {
+            statusMessage = "Added \(added) default location\(added == 1 ? "" : "s") to Library"
         }
     }
 
