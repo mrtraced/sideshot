@@ -672,15 +672,19 @@ class AppState {
 
         var applied = 0
         var skipped: [String] = []
+        var iconsWritten = 0
+        var iconsFailed: [String] = []
 
         for item in items {
+            let linkedLib: CloudFavorite? = item.libraryItemId.flatMap { id in
+                cloud?.favorites.first(where: { $0.id == id })
+            }
+
             let resolved: String? = {
                 // Linked → defer to Library's per-machine path resolution chain
-                if let libId = item.libraryItemId,
-                   let lib = cloud?.favorites.first(where: { $0.id == libId }) {
-                    if let p = PathResolver.resolveLocalPath(for: lib, machineId: machineId, config: config) {
-                        return p
-                    }
+                if let lib = linkedLib,
+                   let p = PathResolver.resolveLocalPath(for: lib, machineId: machineId, config: config) {
+                    return p
                 }
                 // Independent or no Library resolution → trust the item's own path if it exists
                 return PathResolver.exists(item.path) ? item.path : nil
@@ -697,17 +701,36 @@ class AppState {
                     if let libId = item.libraryItemId {
                         markLibraryItemUsed(libId)
                     }
+
+                    // Push custom icon to the folder if the linked Library record
+                    // carries one. Failures (read-only, system-owned, etc.) are
+                    // collected but don't abort the apply.
+                    if let lib = linkedLib, let symbol = lib.iconSymbol {
+                        let color = FinderIconWriter.nsColor(forToken: lib.iconColor)
+                        let ok = FinderIconWriter.writeIcon(
+                            symbol: symbol,
+                            color: color,
+                            toFile: path
+                        )
+                        if ok {
+                            iconsWritten += 1
+                        } else {
+                            iconsFailed.append(item.name)
+                        }
+                    }
                 }
             } catch {
                 skipped.append(item.name)
             }
         }
 
-        if skipped.isEmpty {
-            statusMessage = "Applied \(applied) items to Finder sidebar"
-        } else {
-            statusMessage = "Applied \(applied), skipped \(skipped.count): \(skipped.joined(separator: ", "))"
+        var msg = "Applied \(applied) items"
+        if iconsWritten > 0 { msg += ", \(iconsWritten) custom icon\(iconsWritten == 1 ? "" : "s")" }
+        if !skipped.isEmpty { msg += " · skipped \(skipped.count): \(skipped.joined(separator: ", "))" }
+        if !iconsFailed.isEmpty {
+            msg += " · icon write failed: \(iconsFailed.joined(separator: ", "))"
         }
+        statusMessage = msg
         refresh()
     }
 
