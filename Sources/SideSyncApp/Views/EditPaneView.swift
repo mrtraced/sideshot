@@ -181,6 +181,7 @@ private struct LibraryItemEditor: View {
             VStack(alignment: .leading, spacing: 16) {
                 headerRow
                 pathHintsBlock
+                iconBlock
                 machinePathsBlock
                 Divider()
                 actionsBlock
@@ -217,9 +218,9 @@ private struct LibraryItemEditor: View {
     @ViewBuilder
     private var headerRow: some View {
         HStack(spacing: 12) {
-            Image(systemName: "folder.fill")
+            Image(systemName: IconStyle.symbol(for: favorite.iconSymbol))
                 .font(.system(size: 28))
-                .foregroundStyle(.blue)
+                .foregroundStyle(IconStyle.color(for: favorite.iconColor))
                 .help("Library item — edits propagate via the cloud record")
             VStack(alignment: .leading, spacing: 2) {
                 TextField("Name", text: $editedName)
@@ -274,6 +275,16 @@ private struct LibraryItemEditor: View {
                     }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var iconBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("ICON")
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+            IconPickerView(favorite: favorite)
         }
     }
 

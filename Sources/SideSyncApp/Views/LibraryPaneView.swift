@@ -182,8 +182,12 @@ private struct LibraryTile: View {
 
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
-                Image(systemName: "folder.fill")
-                    .foregroundStyle(inUse ? Color.gray.opacity(0.55) : Color.blue.opacity(0.85))
+                Image(systemName: IconStyle.symbol(for: item.iconSymbol))
+                    .foregroundStyle(
+                        inUse
+                            ? Color.gray.opacity(0.55)
+                            : IconStyle.color(for: item.iconColor).opacity(0.9)
+                    )
                     .font(.system(size: 14))
                     .help("Library item — saved across machines")
                 Text(item.name)

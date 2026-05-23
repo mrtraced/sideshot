@@ -1131,6 +1131,23 @@ class AppState {
         }
     }
 
+    /// Update the icon style (SF Symbol + color token) on a Library record.
+    /// Passing nil clears the override (back to defaults).
+    func updateLibraryIcon(_ favorite: CloudFavorite, symbol: String?, color: String?) {
+        guard var cloudData = cloud,
+              let idx = cloudData.favorites.firstIndex(where: { $0.id == favorite.id }) else { return }
+        cloudData.favorites[idx].iconSymbol = symbol
+        cloudData.favorites[idx].iconColor = color
+        cloudData.lastUpdatedBy = machineId
+        cloudData.lastUpdatedAt = Date()
+        do {
+            try cloudService.write(cloudData)
+            cloud = cloudData
+        } catch {
+            errorMessage = "Failed to update icon: \(error.localizedDescription)"
+        }
+    }
+
     /// Rename a Library record, syncing any linked Pending items.
     func renameLibraryItem(_ favorite: CloudFavorite, newName: String) {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
