@@ -10,8 +10,10 @@ struct LibraryPaneView: View {
     private let tileSize = CGSize(width: 140, height: 70)
 
     var body: some View {
+        @Bindable var state = state
+
         VStack(spacing: 0) {
-            header
+            header(bindable: state)
             Divider()
             body_
         }
@@ -26,14 +28,17 @@ struct LibraryPaneView: View {
                     .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
                 : nil
         )
-        .dropDestination(for: DraggedSidebarItem.self) { items, _ in
-            handleDrop(items)
+        .onDrop(of: [DraggedSidebarItem.typeIdentifier], isTargeted: $isDropTargeted) { providers in
+            guard !state.showArchivedLibrary else { return false }  // archive view doesn't accept drops
+            Task {
+                let items = await DraggedSidebarItem.decode(from: providers)
+                await MainActor.run { handleDrop(items) }
+            }
             return true
-        } isTargeted: { isDropTargeted = $0 }
+        }
     }
 
     private func handleDrop(_ items: [DraggedSidebarItem]) {
-        guard !state.showArchivedLibrary else { return }  // archive view doesn't accept drops
         for item in items {
             switch item.source {
             case .current:
@@ -47,7 +52,9 @@ struct LibraryPaneView: View {
     }
 
     @ViewBuilder
-    private var header: some View {
+    private func header(bindable: AppState) -> some View {
+        @Bindable var bindable = bindable
+
         HStack(spacing: 6) {
             Image(systemName: state.showArchivedLibrary ? "archivebox.fill" : "tray.full")
                 .font(.system(size: 11))
@@ -65,7 +72,7 @@ struct LibraryPaneView: View {
                 .foregroundStyle(.tertiary)
                 .help("\(displayedCount) item\(displayedCount == 1 ? "" : "s") shown")
 
-            sortMenu
+            sortPicker(bindable: bindable)
 
             archiveToggle
         }
@@ -79,28 +86,20 @@ struct LibraryPaneView: View {
     }
 
     @ViewBuilder
-    private var sortMenu: some View {
-        Menu {
+    private func sortPicker(bindable: AppState) -> some View {
+        @Bindable var bindable = bindable
+
+        Picker("Sort", selection: $bindable.librarySort) {
             ForEach(AppState.LibrarySort.allCases, id: \.self) { mode in
-                Button {
-                    state.librarySort = mode
-                } label: {
-                    if state.librarySort == mode {
-                        Label(mode.rawValue, systemImage: "checkmark")
-                    } else {
-                        Text(mode.rawValue)
-                    }
-                }
+                Label(mode.rawValue, systemImage: mode.iconName)
+                    .tag(mode)
             }
-        } label: {
-            Image(systemName: state.librarySort.iconName)
-                .font(.system(size: 11))
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .pickerStyle(.menu)
+        .labelsHidden()
         .fixedSize()
         .help("Sort: \(state.librarySort.rawValue)")
-        .disabled(state.showArchivedLibrary)  // Archive view is name-sorted only
+        .disabled(state.showArchivedLibrary)
     }
 
     @ViewBuilder
@@ -214,21 +213,13 @@ private struct LibraryTile: View {
             state.selectedCloudFavorite = item
             state.editPaneSource = .library
         }
-        .draggable(DraggedSidebarItem(
-            source: .library,
-            identifier: item.id,
-            name: item.name,
-            path: fullPath
-        )) {
-            // Drag preview
-            HStack(spacing: 4) {
-                Image(systemName: "folder.fill")
-                    .foregroundStyle(Color.blue)
-                Text(item.name)
-                    .font(.system(size: 12, weight: .medium))
-            }
-            .padding(6)
-            .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 6))
+        .onDrag {
+            DraggedSidebarItem(
+                source: .library,
+                identifier: item.id,
+                name: item.name,
+                path: fullPath
+            ).makeItemProvider()
         }
         .contextMenu {
             Button {

@@ -71,19 +71,24 @@ struct PendingPaneView: View {
                     .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
                 : nil
         )
-        .dropDestination(for: DraggedSidebarItem.self) { items, _ in
-            for d in items {
-                switch d.source {
-                case .library:
-                    state.dropLibraryItemOntoPending(d.identifier)
-                case .current:
-                    state.dropCurrentOntoPending(name: d.name, path: d.path)
-                case .pending:
-                    break  // self-drag is a no-op (reorder is via ▲/▼)
+        .onDrop(of: [DraggedSidebarItem.typeIdentifier], isTargeted: $isDropTargeted) { providers in
+            Task {
+                let items = await DraggedSidebarItem.decode(from: providers)
+                await MainActor.run {
+                    for d in items {
+                        switch d.source {
+                        case .library:
+                            state.dropLibraryItemOntoPending(d.identifier)
+                        case .current:
+                            state.dropCurrentOntoPending(name: d.name, path: d.path)
+                        case .pending:
+                            break  // self-drag is a no-op (reorder via ▲/▼)
+                        }
+                    }
                 }
             }
             return true
-        } isTargeted: { isDropTargeted = $0 }
+        }
     }
 }
 
@@ -191,20 +196,13 @@ private struct PendingRow: View {
             }
         }
         .padding(.vertical, 1)
-        .draggable(DraggedSidebarItem(
-            source: .pending,
-            identifier: item.id,
-            name: item.name,
-            path: item.path
-        )) {
-            HStack(spacing: 4) {
-                Image(systemName: "folder.fill")
-                    .foregroundStyle(Color.blue)
-                Text(item.name)
-                    .font(.system(size: 12, weight: .medium))
-            }
-            .padding(6)
-            .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 6))
+        .onDrag {
+            DraggedSidebarItem(
+                source: .pending,
+                identifier: item.id,
+                name: item.name,
+                path: item.path
+            ).makeItemProvider()
         }
     }
 

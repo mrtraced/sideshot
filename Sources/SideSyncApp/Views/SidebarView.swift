@@ -98,20 +98,13 @@ private struct CurrentRow: View {
         }
         .padding(.vertical, 1)
         .help(fav.path)
-        .draggable(DraggedSidebarItem(
-            source: .current,
-            identifier: "",
-            name: fav.name,
-            path: fav.path
-        )) {
-            HStack(spacing: 4) {
-                Image(systemName: "folder.fill")
-                    .foregroundStyle(Color.blue)
-                Text(fav.name)
-                    .font(.system(size: 12, weight: .medium))
-            }
-            .padding(6)
-            .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 6))
+        .onDrag {
+            DraggedSidebarItem(
+                source: .current,
+                identifier: "",
+                name: fav.name,
+                path: fav.path
+            ).makeItemProvider()
         }
     }
 
