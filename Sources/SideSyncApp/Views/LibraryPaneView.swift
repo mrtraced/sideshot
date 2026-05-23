@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import SideSyncLib
 
 /// Right-bottom — Item Library: flat pool of reusable items as a tile grid.
@@ -11,6 +12,13 @@ struct LibraryPaneView: View {
 
     var body: some View {
         @Bindable var state = state
+
+        // Explicit subscriptions so SwiftUI's @Observable tracking sees these
+        // through the computed libraryItems chain — without this, picking a
+        // new sort or toggling archive doesn't re-render the grid until some
+        // other observed property changes.
+        let _ = state.librarySort
+        let _ = state.showArchivedLibrary
 
         VStack(spacing: 0) {
             header(bindable: state)
@@ -28,7 +36,7 @@ struct LibraryPaneView: View {
                     .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
                 : nil
         )
-        .onDrop(of: [DraggedSidebarItem.typeIdentifier], isTargeted: $isDropTargeted) { providers in
+        .onDrop(of: [UTType.sideshotSidebarItem], isTargeted: $isDropTargeted) { providers in
             guard !state.showArchivedLibrary else { return false }  // archive view doesn't accept drops
             Task {
                 let items = await DraggedSidebarItem.decode(from: providers)
@@ -89,14 +97,21 @@ struct LibraryPaneView: View {
     private func sortPicker(bindable: AppState) -> some View {
         @Bindable var bindable = bindable
 
-        Picker("Sort", selection: $bindable.librarySort) {
-            ForEach(AppState.LibrarySort.allCases, id: \.self) { mode in
-                Label(mode.rawValue, systemImage: mode.iconName)
-                    .tag(mode)
+        Menu {
+            Picker("Sort", selection: $bindable.librarySort) {
+                ForEach(AppState.LibrarySort.allCases, id: \.self) { mode in
+                    Label(mode.rawValue, systemImage: mode.iconName)
+                        .tag(mode)
+                }
             }
+            .pickerStyle(.inline)
+        } label: {
+            Image(systemName: state.librarySort.iconName)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
         }
-        .pickerStyle(.menu)
-        .labelsHidden()
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .fixedSize()
         .help("Sort: \(state.librarySort.rawValue)")
         .disabled(state.showArchivedLibrary)

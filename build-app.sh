@@ -47,6 +47,21 @@ cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
     <true/>
     <key>NSSupportsSuddenTermination</key>
     <true/>
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.sideshot.sidebar-item</string>
+            <key>UTTypeDescription</key>
+            <string>SideShot Sidebar Item</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict/>
+        </dict>
+    </array>
 </dict>
 </plist>
 PLIST

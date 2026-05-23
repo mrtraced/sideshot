@@ -1,5 +1,12 @@
 import Foundation
 import AppKit
+import UniformTypeIdentifiers
+
+extension UTType {
+    /// The UTI registered in Info.plist (UTExportedTypeDeclarations) for our
+    /// in-process drag payload. Both sides of the drag must reference this.
+    static let sideshotSidebarItem = UTType(importedAs: "com.sideshot.sidebar-item")
+}
 
 /// A sidebar item being dragged between panes (Current, Pending, Library).
 /// Encoded as JSON inside an NSItemProvider with a private UTI string.

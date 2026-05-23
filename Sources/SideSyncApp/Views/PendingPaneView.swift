@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import SideSyncLib
 
 /// Middle column — the user's pending working draft of the sidebar.
@@ -71,7 +72,7 @@ struct PendingPaneView: View {
                     .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
                 : nil
         )
-        .onDrop(of: [DraggedSidebarItem.typeIdentifier], isTargeted: $isDropTargeted) { providers in
+        .onDrop(of: [UTType.sideshotSidebarItem], isTargeted: $isDropTargeted) { providers in
             Task {
                 let items = await DraggedSidebarItem.decode(from: providers)
                 await MainActor.run {
