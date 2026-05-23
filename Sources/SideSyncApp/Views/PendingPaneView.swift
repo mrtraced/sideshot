@@ -6,6 +6,8 @@ import SideSyncLib
 struct PendingPaneView: View {
     @Environment(AppState.self) private var state
 
+    @State private var isDropTargeted = false
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -59,8 +61,29 @@ struct PendingPaneView: View {
                 }
                 .listStyle(.inset)
             }
-
         }
+        .background(
+            isDropTargeted ? Color.accentColor.opacity(0.08) : Color.clear
+        )
+        .overlay(
+            isDropTargeted
+                ? RoundedRectangle(cornerRadius: 0)
+                    .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                : nil
+        )
+        .dropDestination(for: DraggedSidebarItem.self) { items, _ in
+            for d in items {
+                switch d.source {
+                case .library:
+                    state.dropLibraryItemOntoPending(d.identifier)
+                case .current:
+                    state.dropCurrentOntoPending(name: d.name, path: d.path)
+                case .pending:
+                    break  // self-drag is a no-op (reorder is via ▲/▼)
+                }
+            }
+            return true
+        } isTargeted: { isDropTargeted = $0 }
     }
 }
 
@@ -168,6 +191,21 @@ private struct PendingRow: View {
             }
         }
         .padding(.vertical, 1)
+        .draggable(DraggedSidebarItem(
+            source: .pending,
+            identifier: item.id,
+            name: item.name,
+            path: item.path
+        )) {
+            HStack(spacing: 4) {
+                Image(systemName: "folder.fill")
+                    .foregroundStyle(Color.blue)
+                Text(item.name)
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .padding(6)
+            .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 6))
+        }
     }
 
     private func sameItem(_ a: String, _ b: String) -> Bool {

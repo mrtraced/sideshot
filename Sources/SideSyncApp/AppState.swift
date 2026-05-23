@@ -1159,6 +1159,56 @@ class AppState {
         }
     }
 
+    // MARK: - Drag-and-drop handlers
+
+    /// Drop a Library tile onto Pending → add a linked PendingItem (no duplicates).
+    func dropLibraryItemOntoPending(_ libraryId: String) {
+        guard let lib = cloud?.favorites.first(where: { $0.id == libraryId }) else { return }
+        if pending.contains(where: { $0.libraryItemId == libraryId }) {
+            statusMessage = "\"\(lib.name)\" is already in Pending"
+            return
+        }
+        let path = PathResolver.resolveLocalPath(for: lib, machineId: machineId, config: config)
+            ?? lib.paths[machineId]
+            ?? ""
+        var newPending = pending
+        newPending.append(PendingItem(
+            name: lib.name,
+            path: path,
+            libraryItemId: lib.id
+        ))
+        pending = newPending
+        statusMessage = "Added \"\(lib.name)\" to Pending"
+    }
+
+    /// Drop a Current row onto Pending → ensure a Library entry exists, then link.
+    func dropCurrentOntoPending(name: String, path: String) {
+        guard let libId = ensureLibraryEntry(name: name, path: path) else {
+            errorMessage = "Couldn't create Library record for \"\(name)\""
+            return
+        }
+        dropLibraryItemOntoPending(libId)
+    }
+
+    /// Drop a Current row onto Library → ensure record exists (no-op if it does).
+    func dropCurrentOntoLibrary(name: String, path: String) {
+        let beforeCount = (cloud?.favorites.count ?? 0)
+        _ = ensureLibraryEntry(name: name, path: path)
+        let afterCount = (cloud?.favorites.count ?? 0)
+        if afterCount > beforeCount {
+            statusMessage = "Added \"\(name)\" to Library"
+        } else {
+            statusMessage = "\"\(name)\" is already in Library"
+        }
+    }
+
+    /// Drop a Pending row onto Library → remove from Pending. Record stays in Library.
+    func dropPendingOntoLibrary(pendingId: String) {
+        guard let item = pending.first(where: { $0.id == pendingId }) else { return }
+        removePendingItem(id: pendingId)
+        statusMessage = "Removed \"\(item.name)\" from Pending"
+    }
+
     // MARK: - Pending reorder + remove
 
     func movePendingItem(id: String, by offset: Int) {

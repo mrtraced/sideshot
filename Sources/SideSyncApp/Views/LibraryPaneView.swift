@@ -5,6 +5,8 @@ import SideSyncLib
 struct LibraryPaneView: View {
     @Environment(AppState.self) private var state
 
+    @State private var isDropTargeted = false
+
     private let tileSize = CGSize(width: 140, height: 70)
 
     var body: some View {
@@ -12,6 +14,35 @@ struct LibraryPaneView: View {
             header
             Divider()
             body_
+        }
+        .background(
+            isDropTargeted
+                ? Color.accentColor.opacity(0.08)
+                : Color.clear
+        )
+        .overlay(
+            isDropTargeted
+                ? RoundedRectangle(cornerRadius: 0)
+                    .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                : nil
+        )
+        .dropDestination(for: DraggedSidebarItem.self) { items, _ in
+            handleDrop(items)
+            return true
+        } isTargeted: { isDropTargeted = $0 }
+    }
+
+    private func handleDrop(_ items: [DraggedSidebarItem]) {
+        guard !state.showArchivedLibrary else { return }  // archive view doesn't accept drops
+        for item in items {
+            switch item.source {
+            case .current:
+                state.dropCurrentOntoLibrary(name: item.name, path: item.path)
+            case .pending:
+                state.dropPendingOntoLibrary(pendingId: item.identifier)
+            case .library:
+                break  // self-drag is a no-op
+            }
         }
     }
 
@@ -182,6 +213,22 @@ private struct LibraryTile: View {
         .onTapGesture {
             state.selectedCloudFavorite = item
             state.editPaneSource = .library
+        }
+        .draggable(DraggedSidebarItem(
+            source: .library,
+            identifier: item.id,
+            name: item.name,
+            path: fullPath
+        )) {
+            // Drag preview
+            HStack(spacing: 4) {
+                Image(systemName: "folder.fill")
+                    .foregroundStyle(Color.blue)
+                Text(item.name)
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .padding(6)
+            .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 6))
         }
         .contextMenu {
             Button {
