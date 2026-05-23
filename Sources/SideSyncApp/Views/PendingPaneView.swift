@@ -59,6 +59,8 @@ struct PendingPaneView: View {
                         PendingRow(item: item)
                             .tag(item.id as String?)
                     }
+                    .onMove(perform: state.reorderPending)
+                    .onInsert(of: [UTType.sideshotSidebarItem], perform: state.insertIntoPending)
                 }
                 .listStyle(.inset)
             }

@@ -1209,7 +1209,56 @@ class AppState {
         statusMessage = "Removed \"\(item.name)\" from Pending"
     }
 
-    // MARK: - Pending reorder + remove
+    /// Drag-reorder within Pending (used by ForEach.onMove).
+    func reorderPending(from indices: IndexSet, to destination: Int) {
+        var newPending = pending
+        newPending.move(fromOffsets: indices, toOffset: destination)
+        pending = newPending
+    }
+
+    /// Insert dropped items at a specific row index in Pending (used by ForEach.onInsert).
+    func insertIntoPending(at offset: Int, providers: [NSItemProvider]) {
+        Task {
+            let items = await DraggedSidebarItem.decode(from: providers)
+            await MainActor.run {
+                var newPending = pending
+                var insertAt = min(max(offset, 0), newPending.count)
+
+                for d in items {
+                    switch d.source {
+                    case .library:
+                        guard let lib = cloud?.favorites.first(where: { $0.id == d.identifier }) else { continue }
+                        if newPending.contains(where: { $0.libraryItemId == lib.id }) { continue }
+                        let path = PathResolver.resolveLocalPath(
+                            for: lib, machineId: machineId, config: config
+                        ) ?? lib.paths[machineId] ?? ""
+                        newPending.insert(
+                            PendingItem(name: lib.name, path: path, libraryItemId: lib.id),
+                            at: insertAt
+                        )
+                        insertAt += 1
+
+                    case .current:
+                        guard let libId = ensureLibraryEntry(name: d.name, path: d.path) else { continue }
+                        if newPending.contains(where: { $0.libraryItemId == libId }) { continue }
+                        newPending.insert(
+                            PendingItem(name: d.name, path: d.path, libraryItemId: libId),
+                            at: insertAt
+                        )
+                        insertAt += 1
+
+                    case .pending:
+                        // Internal reorder is handled by .onMove on the ForEach;
+                        // .onInsert shouldn't receive pending-source drops.
+                        break
+                    }
+                }
+                pending = newPending
+            }
+        }
+    }
+
+    // MARK: - Pending reorder + remove (button-driven)
 
     func movePendingItem(id: String, by offset: Int) {
         var newPending = pending
