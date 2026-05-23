@@ -58,6 +58,9 @@ struct ContentView: View {
                 if let target = state.pendingApplyAfterSave {
                     state.pendingApplyAfterSave = nil
                     state.replaceSidebar(with: target)
+                } else if state.pendingApplyToFinderAfterSave {
+                    state.pendingApplyToFinderAfterSave = false
+                    state.applyPendingToFinder()
                 }
             })
         }
@@ -78,13 +81,20 @@ struct ContentView: View {
         } message: {
             Text("Removes all items from pending. The Library is unaffected.")
         }
-        .alert("Apply pending to Finder?", isPresented: $state.showApplyPendingConfirm) {
-            Button("Apply", role: .destructive) {
-                state.errorMessage = "Apply lands in P2 — coming next."
+        .alert("Apply Pending to Finder Sidebar?", isPresented: $state.showApplyPendingConfirm) {
+            Button("Save Current & Apply") {
+                state.pendingApplyToFinderAfterSave = true
+                state.showSaveSnapshotSheet = true
             }
+            .keyboardShortcut(.defaultAction)
+
+            Button("Apply", role: .destructive) {
+                state.applyPendingToFinder()
+            }
+
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This will land in Phase 2 — wired in next round.")
+            Text("This replaces the Finder sidebar with the \(state.pending.count) item\(state.pending.count == 1 ? "" : "s") in Pending. Save the current sidebar as a snapshot first to make it reversible.")
         }
     }
 

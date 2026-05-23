@@ -34,6 +34,8 @@ class AppState {
     var showResetPendingConfirm: Bool = false
     var showDeletePendingConfirm: Bool = false
     var showApplyPendingConfirm: Bool = false
+    /// When true, the save-snapshot sheet should fire applyPendingToFinder after saving.
+    var pendingApplyToFinderAfterSave: Bool = false
 
     // Snapshot drawer + Edit pane source tracking
     enum EditSource { case none, pending, library }
@@ -490,6 +492,69 @@ class AppState {
         } catch {
             errorMessage = "Failed to remove: \(error.localizedDescription)"
         }
+    }
+
+    // MARK: - Apply Pending to Finder
+
+    /// Wipe the Finder sidebar and rebuild it from Pending, in order.
+    /// For linked items, uses PathResolver.resolveLocalPath against the
+    /// Library record so the path follows this machine's known location
+    /// (override → machine-specific → fallback). Items whose path can't be
+    /// resolved are skipped, not dropped from Pending.
+    func applyPendingToFinder() {
+        guard let sidebar = sidebarService else {
+            errorMessage = "Sidebar API unavailable."
+            return
+        }
+        let items = pending
+        guard !items.isEmpty else {
+            errorMessage = "Pending is empty — nothing to apply."
+            return
+        }
+
+        do {
+            try sidebar.removeAllFavorites()
+        } catch {
+            errorMessage = "Failed to clear sidebar: \(error.localizedDescription)"
+            return
+        }
+
+        var applied = 0
+        var skipped: [String] = []
+
+        for item in items {
+            let resolved: String? = {
+                // Linked → defer to Library's per-machine path resolution chain
+                if let libId = item.libraryItemId,
+                   let lib = cloud?.favorites.first(where: { $0.id == libId }) {
+                    if let p = PathResolver.resolveLocalPath(for: lib, machineId: machineId, config: config) {
+                        return p
+                    }
+                }
+                // Independent or no Library resolution → trust the item's own path if it exists
+                return PathResolver.exists(item.path) ? item.path : nil
+            }()
+
+            guard let path = resolved else {
+                skipped.append(item.name)
+                continue
+            }
+
+            do {
+                if try sidebar.addFavorite(name: item.name, path: path) {
+                    applied += 1
+                }
+            } catch {
+                skipped.append(item.name)
+            }
+        }
+
+        if skipped.isEmpty {
+            statusMessage = "Applied \(applied) items to Finder sidebar"
+        } else {
+            statusMessage = "Applied \(applied), skipped \(skipped.count): \(skipped.joined(separator: ", "))"
+        }
+        refresh()
     }
 
     // MARK: - Snapshot drawer actions
