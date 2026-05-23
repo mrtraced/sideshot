@@ -46,6 +46,24 @@ class AppState {
     /// Machine currently selected in the drawer's left column.
     var drawerMachineId: String?
 
+    // Library view options
+    enum LibrarySort: String, CaseIterable {
+        case alpha = "Alphabetical"
+        case recent = "Recently Used"
+        case unused = "Unused First"
+
+        var iconName: String {
+            switch self {
+            case .alpha: return "textformat.abc"
+            case .recent: return "clock.arrow.circlepath"
+            case .unused: return "tray"
+            }
+        }
+    }
+    var librarySort: LibrarySort = .alpha
+    /// When true, the Library pane shows archived items with hover-delete affordance.
+    var showArchivedLibrary: Bool = false
+
     // Role change confirmation
     var showRoleChangeConfirm: Bool = false
     var pendingRole: SyncRole?
@@ -413,9 +431,46 @@ class AppState {
 
     // MARK: - Library
 
-    /// Library items, ordered for display.
+    /// Active (non-archived) Library items, sorted per the user's chosen mode.
     var libraryItems: [CloudFavorite] {
-        (cloud?.favorites ?? []).sorted { $0.order < $1.order }
+        let active = (cloud?.favorites ?? []).filter { !$0.archived }
+        return applyLibrarySort(active)
+    }
+
+    /// Items currently archived (soft-deleted), name-sorted.
+    var archivedLibraryItems: [CloudFavorite] {
+        (cloud?.favorites ?? [])
+            .filter { $0.archived }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private func applyLibrarySort(_ items: [CloudFavorite]) -> [CloudFavorite] {
+        switch librarySort {
+        case .alpha:
+            return items.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        case .recent:
+            // Most recently used first; never-used items sink to the bottom (name-sorted).
+            return items.sorted { lhs, rhs in
+                switch (lhs.lastUsedAt, rhs.lastUsedAt) {
+                case let (l?, r?): return l > r
+                case (.some, .none): return true
+                case (.none, .some): return false
+                case (.none, .none):
+                    return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                }
+            }
+        case .unused:
+            // Never-used first, then name-sorted; used items follow in oldest-used order.
+            return items.sorted { lhs, rhs in
+                switch (lhs.lastUsedAt, rhs.lastUsedAt) {
+                case (.none, .none):
+                    return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                case (.none, .some): return true
+                case (.some, .none): return false
+                case let (l?, r?): return l < r
+                }
+            }
+        }
     }
 
     /// Find a library item whose path's last component matches the given path.
@@ -429,7 +484,9 @@ class AppState {
         }
     }
 
-    /// On launch, copy any Current items into Library that aren't there yet and aren't ignored.
+    /// On launch, copy any Current items into Library that aren't there yet and aren't
+    /// ignored or archived. Archived matches are preserved as-is (we don't resurrect
+    /// them without explicit user action).
     func autoImportCurrentToLibrary() {
         guard !localFavorites.isEmpty else { return }
         var cloudData = cloud ?? CloudFavorites(
@@ -446,6 +503,8 @@ class AppState {
                 let favKey = libraryDedupKey(forPath: fav.paths[machineId] ?? "")
                 return favKey == key || fav.pathHints.last?.lowercased() == key
             }) {
+                // Existing record (active OR archived) — don't create a duplicate
+                // and don't auto-unarchive.
                 continue
             }
             let nextOrder = (cloudData.favorites.map(\.order).max() ?? -1) + 1 + i
@@ -518,31 +577,72 @@ class AppState {
         }
     }
 
-    /// Remove an item from the Library and remember the dedup key so auto-import skips it.
+    /// Soft-delete: hide from the default Library view. Record is preserved in
+    /// the cloud so it can be unarchived or hard-deleted later.
     func removeFromLibrary(_ favorite: CloudFavorite) {
+        guard var cloudData = cloud,
+              let idx = cloudData.favorites.firstIndex(where: { $0.id == favorite.id }) else { return }
+        cloudData.favorites[idx].archived = true
+        cloudData.lastUpdatedBy = machineId
+        cloudData.lastUpdatedAt = Date()
+        do {
+            try cloudService.write(cloudData)
+            statusMessage = "Archived \"\(favorite.name)\""
+            refresh()
+        } catch {
+            errorMessage = "Archive failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Restore an archived Library item to the default view.
+    func unarchiveFromLibrary(_ favorite: CloudFavorite) {
+        guard var cloudData = cloud,
+              let idx = cloudData.favorites.firstIndex(where: { $0.id == favorite.id }) else { return }
+        cloudData.favorites[idx].archived = false
+        cloudData.lastUpdatedBy = machineId
+        cloudData.lastUpdatedAt = Date()
+        do {
+            try cloudService.write(cloudData)
+            statusMessage = "Restored \"\(favorite.name)\""
+            refresh()
+        } catch {
+            errorMessage = "Restore failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Permanent delete from the cloud record. Also drops any Pending links to it.
+    func hardDeleteFromLibrary(_ favorite: CloudFavorite) {
         guard var cloudData = cloud else { return }
         cloudData.favorites.removeAll { $0.id == favorite.id }
         cloudData.lastUpdatedBy = machineId
         cloudData.lastUpdatedAt = Date()
 
-        let key: String
-        if let p = favorite.paths[machineId] {
-            key = libraryDedupKey(forPath: p)
-        } else if let hint = favorite.pathHints.last {
-            key = hint.lowercased()
-        } else {
-            key = favorite.name.lowercased()
+        // Cut any Pending references to the deleted record (keep the row but unlink).
+        var newPending = config.pending
+        for i in newPending.indices where newPending[i].libraryItemId == favorite.id {
+            newPending[i].libraryItemId = nil
         }
-        config.ignoredLibraryKeys.insert(key)
 
         do {
             try cloudService.write(cloudData)
+            config.pending = newPending
             try configService.write(config)
-            statusMessage = "Removed \"\(favorite.name)\" from Library"
+            statusMessage = "Deleted \"\(favorite.name)\" permanently"
             refresh()
         } catch {
-            errorMessage = "Failed to remove: \(error.localizedDescription)"
+            errorMessage = "Delete failed: \(error.localizedDescription)"
         }
+    }
+
+    /// Bump lastUsedAt on a Library record (called when items get pushed to Finder).
+    private func markLibraryItemUsed(_ favoriteId: String, at date: Date = Date()) {
+        guard var cloudData = cloud,
+              let idx = cloudData.favorites.firstIndex(where: { $0.id == favoriteId }) else { return }
+        cloudData.favorites[idx].lastUsedAt = date
+        cloudData.lastUpdatedBy = machineId
+        cloudData.lastUpdatedAt = date
+        try? cloudService.write(cloudData)
+        cloud = cloudData
     }
 
     // MARK: - Apply Pending to Finder
@@ -594,6 +694,9 @@ class AppState {
             do {
                 if try sidebar.addFavorite(name: item.name, path: path) {
                     applied += 1
+                    if let libId = item.libraryItemId {
+                        markLibraryItemUsed(libId)
+                    }
                 }
             } catch {
                 skipped.append(item.name)

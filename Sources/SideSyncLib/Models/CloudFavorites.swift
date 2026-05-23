@@ -112,19 +112,44 @@ public struct CloudFavorite: Codable, Identifiable, Equatable, Hashable {
     public var order: Int
     /// Machine-name -> absolute path on that machine
     public var paths: [String: String]
+    /// Soft-deleted from the Library default view. Record is preserved so the
+    /// user can restore it or browse the archive; hard delete is a separate action.
+    public var archived: Bool
+    /// Last time this item was applied to a Finder sidebar (any machine).
+    /// nil = never used. Powers the Recent / Unused sorts.
+    public var lastUsedAt: Date?
 
     public init(
         id: String,
         name: String,
         pathHints: [String],
         order: Int,
-        paths: [String: String]
+        paths: [String: String],
+        archived: Bool = false,
+        lastUsedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
         self.pathHints = pathHints
         self.order = order
         self.paths = paths
+        self.archived = archived
+        self.lastUsedAt = lastUsedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.pathHints = try c.decode([String].self, forKey: .pathHints)
+        self.order = try c.decode(Int.self, forKey: .order)
+        self.paths = try c.decode([String: String].self, forKey: .paths)
+        self.archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
+        self.lastUsedAt = try c.decodeIfPresent(Date.self, forKey: .lastUsedAt)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, pathHints, order, paths, archived, lastUsedAt
     }
 
     /// Build path hints from a full path (last 2 non-trivial components).

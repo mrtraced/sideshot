@@ -9,51 +9,121 @@ struct LibraryPaneView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Image(systemName: "tray.full")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .help("Item Library — reusable folder records that live in the cloud")
-                Text("Item Library")
-                    .font(.system(size: 12, weight: .semibold))
-                Spacer()
-                Text("\(state.libraryItems.count)")
+            header
+            Divider()
+            body_
+        }
+    }
+
+    @ViewBuilder
+    private var header: some View {
+        HStack(spacing: 6) {
+            Image(systemName: state.showArchivedLibrary ? "archivebox.fill" : "tray.full")
+                .font(.system(size: 11))
+                .foregroundStyle(state.showArchivedLibrary ? Color.orange : .secondary)
+                .help(state.showArchivedLibrary
+                      ? "Archive — items you've removed but not permanently deleted"
+                      : "Item Library — reusable folder records that live in the cloud")
+            Text(state.showArchivedLibrary ? "Archive" : "Item Library")
+                .font(.system(size: 12, weight: .semibold))
+
+            Spacer()
+
+            Text("\(displayedCount)")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .help("\(displayedCount) item\(displayedCount == 1 ? "" : "s") shown")
+
+            sortMenu
+
+            archiveToggle
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.bar)
+    }
+
+    private var displayedCount: Int {
+        state.showArchivedLibrary ? state.archivedLibraryItems.count : state.libraryItems.count
+    }
+
+    @ViewBuilder
+    private var sortMenu: some View {
+        Menu {
+            ForEach(AppState.LibrarySort.allCases, id: \.self) { mode in
+                Button {
+                    state.librarySort = mode
+                } label: {
+                    if state.librarySort == mode {
+                        Label(mode.rawValue, systemImage: "checkmark")
+                    } else {
+                        Text(mode.rawValue)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: state.librarySort.iconName)
+                .font(.system(size: 11))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Sort: \(state.librarySort.rawValue)")
+        .disabled(state.showArchivedLibrary)  // Archive view is name-sorted only
+    }
+
+    @ViewBuilder
+    private var archiveToggle: some View {
+        Button {
+            state.showArchivedLibrary.toggle()
+        } label: {
+            Image(systemName: state.showArchivedLibrary ? "tray.full" : "archivebox")
+                .font(.system(size: 11))
+                .foregroundStyle(state.showArchivedLibrary ? Color.accentColor : .secondary)
+        }
+        .buttonStyle(.borderless)
+        .help(state.showArchivedLibrary
+              ? "Back to Library"
+              : "Show archived items (soft-deleted, can be restored)")
+    }
+
+    // MARK: - Body
+
+    @ViewBuilder
+    private var body_: some View {
+        let items = state.showArchivedLibrary ? state.archivedLibraryItems : state.libraryItems
+
+        if items.isEmpty {
+            VStack(spacing: 6) {
+                Image(systemName: state.showArchivedLibrary ? "archivebox" : "tray")
+                    .font(.system(size: 22))
+                    .foregroundStyle(.tertiary)
+                Text(state.showArchivedLibrary ? "Nothing archived" : "No saved items")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
-                    .help("Number of items in the Library")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.bar)
-
-            Divider()
-
-            if state.libraryItems.isEmpty {
-                VStack(spacing: 6) {
-                    Image(systemName: "tray")
-                        .font(.system(size: 22))
-                        .foregroundStyle(.tertiary)
-                    Text("No saved items")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: tileSize.width, maximum: tileSize.width + 30), spacing: 10)],
-                        spacing: 10
-                    ) {
-                        ForEach(state.libraryItems) { item in
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: tileSize.width, maximum: tileSize.width + 30), spacing: 10)],
+                    spacing: 10
+                ) {
+                    ForEach(items) { item in
+                        if state.showArchivedLibrary {
+                            ArchivedTile(item: item, size: tileSize)
+                        } else {
                             LibraryTile(item: item, size: tileSize)
                         }
                     }
-                    .padding(10)
                 }
+                .padding(10)
             }
         }
     }
 }
+
+// MARK: - Active Library tile
 
 private struct LibraryTile: View {
     @Environment(AppState.self) private var state
@@ -114,12 +184,92 @@ private struct LibraryTile: View {
             state.editPaneSource = .library
         }
         .contextMenu {
-            Button(role: .destructive) {
+            Button {
                 state.removeFromLibrary(item)
             } label: {
-                Label("Remove from Library", systemImage: "trash")
+                Label("Archive", systemImage: "archivebox")
             }
         }
         .quickHelp(inUse ? "\(fullPath)  •  In use in Pending" : fullPath)
+    }
+}
+
+// MARK: - Archived tile (hover to reveal restore + hard-delete)
+
+private struct ArchivedTile: View {
+    @Environment(AppState.self) private var state
+    let item: CloudFavorite
+    let size: CGSize
+
+    @State private var isHovering = false
+
+    var body: some View {
+        let fullPath = item.paths[state.machineId] ?? item.paths.values.first ?? item.pathHints.joined(separator: "/")
+
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Image(systemName: "folder")
+                    .foregroundStyle(Color.gray.opacity(0.6))
+                    .font(.system(size: 14))
+                    .help("Archived item — restore to bring back to Library")
+                Text(item.name)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            Spacer(minLength: 0)
+            Text(item.pathHints.last ?? "")
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .padding(8)
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.orange.opacity(isHovering ? 0.08 : 0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.orange.opacity(0.30),
+                              style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+        )
+        .overlay(alignment: .topTrailing) {
+            if isHovering {
+                HStack(spacing: 4) {
+                    Button {
+                        state.unarchiveFromLibrary(item)
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.green)
+                            .background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Restore to Library")
+
+                    Button {
+                        state.hardDeleteFromLibrary(item)
+                    } label: {
+                        Image(systemName: "trash.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.red)
+                            .background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Delete permanently")
+                }
+                .padding(4)
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 8))
+        .onHover { isHovering = $0 }
+        .onTapGesture {
+            state.selectedCloudFavorite = item
+            state.editPaneSource = .library
+        }
+        .quickHelp("\(fullPath)  •  Archived")
     }
 }
