@@ -82,6 +82,9 @@ public struct LocalConfig: Codable {
     /// Maximum snapshots to keep per machine. 0 = no limit (default).
     /// On save, older snapshots beyond this count are pruned.
     public var maxSnapshotsPerMachine: Int
+    /// Recently used SF Symbol names in the icon picker. Most-recent first;
+    /// trimmed to a cap so the picker's Recently Used row stays compact.
+    public var recentIconSymbols: [String]
 
     public init(
         machineId: String = "",
@@ -97,7 +100,8 @@ public struct LocalConfig: Codable {
         writeFinderIconsOnApply: Bool = true,
         defaultLibrarySort: String = "alpha",
         saveBeforeApplyDefault: Bool = true,
-        maxSnapshotsPerMachine: Int = 0
+        maxSnapshotsPerMachine: Int = 0,
+        recentIconSymbols: [String] = []
     ) {
         self.machineId = machineId
         self.role = role
@@ -113,6 +117,7 @@ public struct LocalConfig: Codable {
         self.defaultLibrarySort = defaultLibrarySort
         self.saveBeforeApplyDefault = saveBeforeApplyDefault
         self.maxSnapshotsPerMachine = maxSnapshotsPerMachine
+        self.recentIconSymbols = recentIconSymbols
     }
 
     public init(from decoder: Decoder) throws {
@@ -131,12 +136,13 @@ public struct LocalConfig: Codable {
         self.defaultLibrarySort = try c.decodeIfPresent(String.self, forKey: .defaultLibrarySort) ?? "alpha"
         self.saveBeforeApplyDefault = try c.decodeIfPresent(Bool.self, forKey: .saveBeforeApplyDefault) ?? true
         self.maxSnapshotsPerMachine = try c.decodeIfPresent(Int.self, forKey: .maxSnapshotsPerMachine) ?? 0
+        self.recentIconSymbols = try c.decodeIfPresent([String].self, forKey: .recentIconSymbols) ?? []
     }
 
     private enum CodingKeys: String, CodingKey {
         case machineId, role, hiddenFavorites, pathOverrides, localOnlyFavorites, pending, ignoredLibraryKeys
         case cloudSyncDirectory, autoImportOnLaunch, seedDefaultsOnLaunch, writeFinderIconsOnApply
-        case defaultLibrarySort, saveBeforeApplyDefault, maxSnapshotsPerMachine
+        case defaultLibrarySort, saveBeforeApplyDefault, maxSnapshotsPerMachine, recentIconSymbols
     }
 
     public static let defaultConfig = LocalConfig()

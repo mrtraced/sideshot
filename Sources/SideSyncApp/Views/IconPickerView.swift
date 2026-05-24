@@ -2,36 +2,56 @@ import SwiftUI
 import SideSyncLib
 
 /// Inline icon picker for a Library record.
-/// Shows the current icon, a row of color swatches, and a grid of SF Symbols
-/// grouped by theme. Changes write through to the Library record immediately;
-/// linked Pending rows and tiles re-render reactively.
+/// Preview row + Reset action, color swatches, optional search field, a
+/// Recently Used row (when populated), and the curated grouped symbol grid.
 struct IconPickerView: View {
     @Environment(AppState.self) private var state
     let favorite: CloudFavorite
+
+    @State private var searchQuery: String = ""
 
     private var resolvedSymbol: String { IconStyle.symbol(for: favorite.iconSymbol) }
     private var resolvedColor: Color { IconStyle.color(for: favorite.iconColor) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Theme.Space.lg) {
             preview
             colorRow
-            symbolGrid
+            searchField
+            if !state.config.recentIconSymbols.isEmpty && trimmedQuery.isEmpty {
+                recentRow
+            }
+            symbolGroups
         }
     }
 
-    // MARK: - Preview row
+    private var trimmedQuery: String {
+        searchQuery.trimmingCharacters(in: .whitespaces).lowercased()
+    }
+
+    // MARK: - Preview
 
     @ViewBuilder
     private var preview: some View {
-        HStack(spacing: 8) {
-            Image(systemName: resolvedSymbol)
-                .font(.system(size: 18))
-                .foregroundStyle(resolvedColor)
-                .frame(width: 22, height: 22)
-            Text("Icon")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+        HStack(spacing: Theme.Space.md) {
+            ZStack {
+                RoundedRectangle(cornerRadius: Theme.Radius.md)
+                    .fill(resolvedColor.opacity(0.14))
+                    .frame(width: 36, height: 36)
+                Image(systemName: resolvedSymbol)
+                    .font(.system(size: 18))
+                    .foregroundStyle(resolvedColor)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Icon")
+                    .font(Theme.Font_.editLabel)
+                    .foregroundStyle(.secondary)
+                Text(resolvedSymbol)
+                    .font(Theme.Font_.tinyMono)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
             Spacer()
             if favorite.iconSymbol != nil || favorite.iconColor != nil {
                 Button {
@@ -50,20 +70,21 @@ struct IconPickerView: View {
 
     @ViewBuilder
     private var colorRow: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Theme.Space.sm) {
             ForEach(IconStyle.colorTokens, id: \.self) { token in
                 let isSelected = favorite.iconColor == token
                 Circle()
                     .fill(IconStyle.color(for: token))
-                    .frame(width: 16, height: 16)
+                    .frame(width: Theme.Size.colorSwatch, height: Theme.Size.colorSwatch)
                     .overlay(
                         Circle()
                             .strokeBorder(
-                                isSelected ? Color.primary : Color.gray.opacity(0.3),
-                                lineWidth: isSelected ? 2 : 1
+                                isSelected ? Color.primary : Theme.Colors.border,
+                                lineWidth: isSelected ? Theme.Stroke.prominent : Theme.Stroke.hairline
                             )
                     )
                     .scaleEffect(isSelected ? 1.15 : 1.0)
+                    .animation(Theme.Animation_.quick, value: isSelected)
                     .onTapGesture {
                         state.updateLibraryIcon(
                             favorite,
@@ -76,25 +97,100 @@ struct IconPickerView: View {
         }
     }
 
-    // MARK: - Symbol grid
+    // MARK: - Search
 
     @ViewBuilder
-    private var symbolGrid: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(IconStyle.symbolGroups, id: \.label) { group in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(group.label.uppercased())
-                        .font(.system(size: 9))
-                        .foregroundStyle(.tertiary)
-                    LazyVGrid(
-                        columns: Array(repeating: GridItem(.fixed(28), spacing: 4), count: 6),
-                        spacing: 4
-                    ) {
-                        ForEach(group.symbols, id: \.self) { symbol in
-                            symbolCell(symbol)
-                        }
+    private var searchField: some View {
+        HStack(spacing: Theme.Space.sm) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            TextField("Search symbols (or paste an exact SF Symbol name)", text: $searchQuery)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+            if !searchQuery.isEmpty {
+                Button {
+                    searchQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, Theme.Space.md)
+        .padding(.vertical, Theme.Space.sm - 1)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.Radius.md)
+                .fill(Theme.Colors.tileRest)
+        )
+    }
+
+    // MARK: - Recently used
+
+    @ViewBuilder
+    private var recentRow: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.xs) {
+            Text("RECENTLY USED")
+                .font(Theme.Font_.editLabel)
+                .foregroundStyle(.tertiary)
+            symbolGrid(symbols: state.config.recentIconSymbols)
+        }
+    }
+
+    // MARK: - Grouped grid (or search results)
+
+    @ViewBuilder
+    private var symbolGroups: some View {
+        if trimmedQuery.isEmpty {
+            VStack(alignment: .leading, spacing: Theme.Space.md) {
+                ForEach(IconStyle.symbolGroups, id: \.label) { group in
+                    VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                        Text(group.label.uppercased())
+                            .font(Theme.Font_.editLabel)
+                            .foregroundStyle(.tertiary)
+                        symbolGrid(symbols: group.symbols)
                     }
                 }
+            }
+        } else {
+            let matches = searchMatches
+            if matches.isEmpty {
+                Text("No matching symbols")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, Theme.Space.md)
+            } else {
+                symbolGrid(symbols: matches)
+            }
+        }
+    }
+
+    /// Curated-list substring match. If the exact query is itself a valid SF
+    /// Symbol name (so power users can type any symbol directly), it's
+    /// surfaced at the top of the list.
+    private var searchMatches: [String] {
+        let query = trimmedQuery
+        let curated = IconStyle.symbolGroups.flatMap(\.symbols)
+        var matches = curated.filter { $0.lowercased().contains(query) }
+        if !matches.contains(query),
+           NSImage(systemSymbolName: query, accessibilityDescription: nil) != nil {
+            matches.insert(query, at: 0)
+        }
+        return matches
+    }
+
+    @ViewBuilder
+    private func symbolGrid(symbols: [String]) -> some View {
+        let cell = Theme.Size.iconPickerCell
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.fixed(cell), spacing: Theme.Space.xs), count: 6),
+            spacing: Theme.Space.xs
+        ) {
+            ForEach(symbols, id: \.self) { symbol in
+                symbolCell(symbol)
             }
         }
     }
@@ -102,6 +198,7 @@ struct IconPickerView: View {
     @ViewBuilder
     private func symbolCell(_ symbol: String) -> some View {
         let isSelected = favorite.iconSymbol == symbol
+        let cell = Theme.Size.iconPickerCell
 
         Button {
             state.updateLibraryIcon(
@@ -111,18 +208,18 @@ struct IconPickerView: View {
             )
         } label: {
             Image(systemName: symbol)
-                .font(.system(size: 14))
+                .font(.system(size: 16))
                 .foregroundStyle(isSelected ? resolvedColor : .secondary)
-                .frame(width: 26, height: 26)
+                .frame(width: cell, height: cell)
                 .background(
-                    RoundedRectangle(cornerRadius: 5)
+                    RoundedRectangle(cornerRadius: Theme.Radius.sm)
                         .fill(isSelected ? resolvedColor.opacity(0.15) : Color.clear)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 5)
+                    RoundedRectangle(cornerRadius: Theme.Radius.sm)
                         .strokeBorder(
-                            isSelected ? resolvedColor : Color.gray.opacity(0.2),
-                            lineWidth: isSelected ? 1.5 : 1
+                            isSelected ? resolvedColor : Theme.Colors.borderSubtle,
+                            lineWidth: isSelected ? Theme.Stroke.selected : Theme.Stroke.hairline
                         )
                 )
         }

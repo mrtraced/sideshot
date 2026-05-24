@@ -18,12 +18,9 @@ struct SnapshotDrawerView: View {
         }
         .background(
             ZStack {
-                Color(nsColor: .windowBackgroundColor)
+                Theme.Colors.surface
                 LinearGradient(
-                    colors: [
-                        Color.indigo.opacity(0.10),
-                        Color.indigo.opacity(0.02)
-                    ],
+                    colors: [Theme.Colors.drawerTintTop, Theme.Colors.drawerTintBottom],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -31,50 +28,38 @@ struct SnapshotDrawerView: View {
         )
         .overlay(
             Rectangle()
-                .fill(Color.indigo.opacity(0.45))
-                .frame(height: 2),
+                .fill(Theme.Colors.drawerAccentStripe)
+                .frame(height: 1.5),
             alignment: .top
         )
-        .shadow(color: Color.black.opacity(0.18), radius: 8, x: 0, y: -3)
+        .shadow(color: Color.black.opacity(0.14), radius: 6, x: 0, y: -2)
     }
 
     // MARK: - Header
 
     @ViewBuilder
     private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "icloud.fill")
-                .font(.system(size: 11))
-                .foregroundStyle(.indigo)
-                .help("Cloud snapshot — saved sidebar from a known machine")
+        PaneHeader(
+            icon: "icloud.fill",
+            iconColor: .indigo,
+            iconHelp: "Cloud snapshot — saved sidebar from a known machine",
+            title: selectedSnapshot?.name ?? "Snapshot Preview"
+        ) {
             if let snap = selectedSnapshot {
-                Text(snap.name)
-                    .font(.system(size: 12, weight: .semibold))
-                    .lineLimit(1)
-                Text("·")
-                    .foregroundStyle(.tertiary)
                 Text(snap.machineId)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("Snapshot Preview")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(Theme.Font_.paneCount)
                     .foregroundStyle(.secondary)
             }
-            Spacer()
             Button {
                 state.showSnapshotDrawer = false
             } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 14))
+                    .font(.system(size: 13))
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
             .help("Close")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(.bar)
     }
 
     // MARK: - Body — items in the selected snapshot

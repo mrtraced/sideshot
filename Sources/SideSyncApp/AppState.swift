@@ -1410,9 +1410,19 @@ class AppState {
         do {
             try cloudService.write(cloudData)
             cloud = cloudData
+            if let symbol { noteSymbolUsed(symbol) }
         } catch {
             errorMessage = "Failed to update icon: \(error.localizedDescription)"
         }
+    }
+
+    /// Bump a symbol to the front of recentIconSymbols (capped to 12).
+    private func noteSymbolUsed(_ symbol: String) {
+        var recent = config.recentIconSymbols.filter { $0 != symbol }
+        recent.insert(symbol, at: 0)
+        if recent.count > 12 { recent = Array(recent.prefix(12)) }
+        config.recentIconSymbols = recent
+        try? configService.write(config)
     }
 
     /// Rename a Library record, syncing any linked Pending items.

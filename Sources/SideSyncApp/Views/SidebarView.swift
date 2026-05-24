@@ -28,28 +28,20 @@ private struct CurrentSidebarPane: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Image(systemName: "sidebar.left")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .help("Current Sidebar — live mirror of the Finder sidebar")
-                Text("Current Sidebar")
-                    .font(.system(size: 12, weight: .semibold))
-                Spacer()
+            PaneHeader(
+                icon: "sidebar.left",
+                iconHelp: "Current Sidebar — live mirror of the Finder sidebar",
+                title: "Current Sidebar"
+            ) {
                 Text("read-only")
-                    .font(.system(size: 9))
+                    .font(Theme.Font_.badge)
                     .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 5)
+                    .padding(.horizontal, Theme.Space.xs + 1)
                     .padding(.vertical, 1)
-                    .background(.quaternary)
+                    .background(Theme.Colors.borderSubtle)
                     .clipShape(Capsule())
                     .help("Read-only — edit Pending instead, then Apply")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.bar)
-
-            Divider()
 
             if state.localFavorites.isEmpty {
                 VStack(spacing: 6) {
@@ -69,10 +61,10 @@ private struct CurrentSidebarPane: View {
                 }
                 .listStyle(.sidebar)
                 .scrollContentBackground(.hidden)
-                .background(Color.gray.opacity(0.06))
+                .background(Theme.Colors.surfaceMuted)
             }
         }
-        .background(Color.gray.opacity(0.04))
+        .background(Theme.Colors.surfaceMuted)
     }
 }
 
@@ -125,22 +117,15 @@ private struct MachinesBrowserPane: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Image(systemName: "icloud.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.indigo)
-                Text("Machines")
-                    .font(.system(size: 12, weight: .semibold))
-                Spacer()
+            PaneHeader(
+                icon: "icloud.fill",
+                iconColor: .indigo,
+                title: "Machines"
+            ) {
                 Text("\(state.knownMachines.count)")
                     .font(.system(size: 9))
                     .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.bar)
-
-            Divider()
 
             if state.knownMachines.isEmpty {
                 VStack(spacing: 6) {

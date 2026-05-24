@@ -11,25 +11,16 @@ struct PendingPaneView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Image(systemName: "pencil.and.list.clipboard")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .help("Pending Sidebar — your working draft. Apply to push to Finder.")
-                Text("Pending Sidebar")
-                    .font(.system(size: 13, weight: .semibold))
-                Spacer()
+            PaneHeader(
+                icon: "pencil.and.list.clipboard",
+                iconHelp: "Pending Sidebar — your working draft. Apply to push to Finder.",
+                title: "Pending Sidebar"
+            ) {
                 Text("\(state.pending.count) items")
-                    .font(.caption)
+                    .font(Theme.Font_.paneCount)
                     .foregroundStyle(.tertiary)
                     .help("Number of items in Pending")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.bar)
-
-            Divider()
 
             // Body
             if state.pending.isEmpty {
@@ -116,35 +107,35 @@ private struct PendingRow: View {
         let iconSymbol = IconStyle.symbol(for: linkedLib?.iconSymbol)
         let iconColor = IconStyle.color(for: linkedLib?.iconColor)
 
-        HStack(spacing: 8) {
+        HStack(spacing: Theme.Space.md) {
             Image(systemName: iconSymbol)
                 .foregroundStyle(iconColor)
-                .font(.system(size: 14))
+                .font(.system(size: 15))
                 .help("Sidebar item")
 
             VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 4) {
+                HStack(spacing: Theme.Space.xs) {
                     Text(item.name)
-                        .font(.system(size: 13))
+                        .font(Theme.Font_.rowTitle)
                         .lineLimit(1)
 
                     // Path existence — most important: will Apply actually work?
                     if exists {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.green)
+                            .font(Theme.Font_.badge)
+                            .foregroundStyle(Theme.Colors.success)
                             .help("Path exists on this machine")
                     } else {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.red)
+                            .font(Theme.Font_.badge)
+                            .foregroundStyle(Theme.Colors.error)
                             .help("Path missing — Apply will skip this item")
                     }
 
                     // Already in Current — applying won't change this entry
                     if inCurrent {
                         Image(systemName: "sidebar.left")
-                            .font(.system(size: 9))
+                            .font(Theme.Font_.badge)
                             .foregroundStyle(.gray)
                             .help("Already in Current Sidebar — Apply is a no-op for this entry")
                     }
@@ -152,18 +143,18 @@ private struct PendingRow: View {
                     // Library linkage — edits propagate cross-machine
                     if isLinked {
                         Image(systemName: "link")
-                            .font(.system(size: 9))
-                            .foregroundStyle(Color.accentColor)
+                            .font(Theme.Font_.badge)
+                            .foregroundStyle(Theme.Colors.linkedAccent)
                             .help("Linked to Library — edits propagate to other machines via the cloud record")
                     } else {
                         Image(systemName: "link.badge.plus")
-                            .font(.system(size: 9))
+                            .font(Theme.Font_.badge)
                             .foregroundStyle(.tertiary)
                             .help("Independent — not linked to Library; edits stay local")
                     }
                 }
                 Text(abbreviatePath(item.path))
-                    .font(.system(size: 10))
+                    .font(Theme.Font_.rowPath)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .help(item.path)
