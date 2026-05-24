@@ -55,6 +55,22 @@ struct SideSyncToolbar: SwiftUI.ToolbarContent {
         }
 
         ToolbarItem(placement: .primaryAction) {
+            Menu {
+                ForEach(AppState.dividerStyles, id: \.self) { style in
+                    Button {
+                        state.addDivider(style: style)
+                    } label: {
+                        Text(style)
+                            .font(.system(.body, design: .monospaced))
+                    }
+                }
+            } label: {
+                Label("Add Divider", systemImage: "minus")
+            }
+            .help("Append a visual divider row to Pending. macOS doesn't support real sidebar dividers, so SideShot manages a sentinel folder for each.")
+        }
+
+        ToolbarItem(placement: .primaryAction) {
             Spacer()
         }
 

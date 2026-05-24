@@ -39,15 +39,15 @@ struct LibraryPaneView: View {
         .onDrop(of: [UTType.sideshotSidebarItem, UTType.fileURL], isTargeted: $isDropTargeted) { providers in
             guard !state.showArchivedLibrary else { return false }  // archive view doesn't accept drops
             Task {
-                let items = await DraggedSidebarItem.decode(from: providers)
-                await MainActor.run { handleDrop(items) }
+                let result = await DraggedSidebarItem.decode(from: providers)
+                await MainActor.run { handleDrop(result) }
             }
             return true
         }
     }
 
-    private func handleDrop(_ items: [DraggedSidebarItem]) {
-        for item in items {
+    private func handleDrop(_ result: DraggedSidebarItem.DecodeResult) {
+        for item in result.accepted {
             switch item.source {
             case .current:
                 state.dropCurrentOntoLibrary(name: item.name, path: item.path)
@@ -57,6 +57,20 @@ struct LibraryPaneView: View {
                 break  // self-drag is a no-op
             }
         }
+        reportRejections(result)
+    }
+
+    private func reportRejections(_ result: DraggedSidebarItem.DecodeResult) {
+        guard !result.rejectedFiles.isEmpty || result.failedURLs > 0 else { return }
+        var parts: [String] = []
+        if !result.rejectedFiles.isEmpty {
+            let n = result.rejectedFiles.count
+            parts.append("Skipped \(n) file\(n == 1 ? "" : "s") — only folders can live in the Finder sidebar")
+        }
+        if result.failedURLs > 0 {
+            parts.append("\(result.failedURLs) item\(result.failedURLs == 1 ? "" : "s") couldn't be read")
+        }
+        state.errorMessage = parts.joined(separator: " · ")
     }
 
     @ViewBuilder
@@ -175,34 +189,12 @@ private struct LibraryTile: View {
         let inUse = state.isInPending(libraryItemId: item.id)
         let fullPath = item.paths[state.machineId] ?? item.paths.values.first ?? item.pathHints.joined(separator: "/")
 
-        VStack(alignment: .leading, spacing: Theme.Space.xs) {
-            HStack(spacing: Theme.Space.xs) {
-                Image(systemName: "folder.fill")
-                    .foregroundStyle(
-                        inUse
-                            ? Color.gray.opacity(0.55)
-                            : Color.blue.opacity(0.9)
-                    )
-                    .font(.system(size: 15))
-                    .help("Library item — saved across machines")
-                Text(item.name)
-                    .font(Theme.Font_.tileTitle)
-                    .foregroundStyle(inUse ? .secondary : .primary)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                if inUse {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary.opacity(0.8))
-                        .help("In use in Pending — already placed in the draft sidebar")
-                }
+        Group {
+            if item.isDivider {
+                dividerContent(inUse: inUse)
+            } else {
+                regularContent(inUse: inUse)
             }
-            Spacer(minLength: 0)
-            Text(item.pathHints.last ?? "")
-                .font(Theme.Font_.tilePath)
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
-                .truncationMode(.middle)
         }
         .padding(Theme.Space.md)
         .frame(width: size.width, height: size.height, alignment: .topLeading)
@@ -251,7 +243,72 @@ private struct LibraryTile: View {
                 Label("Archive", systemImage: "archivebox")
             }
         }
-        .quickHelp(inUse ? "\(fullPath)  •  In use in Pending" : fullPath)
+        .quickHelp(
+            item.isDivider
+                ? "Divider — sentinel folder under ~/.sidesync/dividers/"
+                : (inUse ? "\(fullPath)  •  In use in Pending" : fullPath)
+        )
+    }
+
+    @ViewBuilder
+    private func regularContent(inUse: Bool) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Space.xs) {
+            HStack(spacing: Theme.Space.xs) {
+                Image(systemName: "folder.fill")
+                    .foregroundStyle(
+                        inUse
+                            ? Color.gray.opacity(0.55)
+                            : Color.blue.opacity(0.9)
+                    )
+                    .font(.system(size: 15))
+                    .help("Library item — saved across machines")
+                Text(item.name)
+                    .font(Theme.Font_.tileTitle)
+                    .foregroundStyle(inUse ? .secondary : .primary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if inUse {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary.opacity(0.8))
+                        .help("In use in Pending — already placed in the draft sidebar")
+                }
+            }
+            Spacer(minLength: 0)
+            Text(item.pathHints.last ?? "")
+                .font(Theme.Font_.tilePath)
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+    }
+
+    @ViewBuilder
+    private func dividerContent(inUse: Bool) -> some View {
+        VStack(spacing: Theme.Space.xs) {
+            HStack(spacing: Theme.Space.sm) {
+                Rectangle()
+                    .fill(Theme.Colors.border)
+                    .frame(height: 1)
+                Text("DIVIDER")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                Rectangle()
+                    .fill(Theme.Colors.border)
+                    .frame(height: 1)
+            }
+            Text(item.name)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(inUse ? .tertiary : .secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            if inUse {
+                Text("in use")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

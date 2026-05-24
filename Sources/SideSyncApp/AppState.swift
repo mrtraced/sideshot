@@ -699,6 +699,11 @@ class AppState {
 
         var added = 0
         for (i, local) in localFavorites.enumerated() {
+            // Divider sentinels live under ~/.sidesync/dividers — SideShot
+            // already manages them as Library records with isDivider=true.
+            // Don't try to auto-import them as if they were regular folders.
+            if isDividerSentinelPath(local.path) { continue }
+
             let key = libraryDedupKey(forPath: local.path)
             if config.ignoredLibraryKeys.contains(key) { continue }
             if cloudData.favorites.contains(where: { fav in
@@ -819,10 +824,20 @@ class AppState {
         cloudData.lastUpdatedBy = machineId
         cloudData.lastUpdatedAt = Date()
 
-        // Cut any Pending references to the deleted record (keep the row but unlink).
+        // For divider records, also remove the sentinel folder. Dividers
+        // dropped from Pending should leave nothing on disk.
+        if favorite.isDivider { cleanupDividerSentinel(favorite) }
+
+        // Cut any Pending references to the deleted record. For dividers we
+        // drop the pending row entirely (it'd be useless without the sentinel);
+        // for regular records keep the row but unlink it.
         var newPending = config.pending
-        for i in newPending.indices where newPending[i].libraryItemId == favorite.id {
-            newPending[i].libraryItemId = nil
+        if favorite.isDivider {
+            newPending.removeAll { $0.libraryItemId == favorite.id }
+        } else {
+            for i in newPending.indices where newPending[i].libraryItemId == favorite.id {
+                newPending[i].libraryItemId = nil
+            }
         }
 
         do {
@@ -1423,6 +1438,110 @@ class AppState {
         }
     }
 
+    // MARK: - Dividers (visual separators in the sidebar)
+
+    /// Curated divider styles. Picked to read as dividers but vary visually.
+    /// macOS Finder doesn't support real divider items in Favorites — these
+    /// are sentinel folders whose names look like rules.
+    static let dividerStyles: [String] = [
+        "———————————",
+        "·  ·  ·  ·  ·  ·",
+        "•••••••••••",
+        "═══════════",
+        "▬▬▬▬▬▬▬▬▬▬▬",
+        "┄┄┄┄┄┄┄┄┄┄"
+    ]
+
+    /// Root directory where divider sentinel folders are managed.
+    private var dividersRoot: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".sidesync/dividers", isDirectory: true)
+    }
+
+    /// True if a path lives under the dividers root (so we can skip it in
+    /// auto-import and the Current → Library/Pending drag handlers).
+    func isDividerSentinelPath(_ path: String) -> Bool {
+        let rootPrefix = dividersRoot.path
+        let normalized = path.hasSuffix("/") ? String(path.dropLast()) : path
+        return normalized.hasPrefix(rootPrefix + "/")
+    }
+
+    /// Create a sentinel folder for a divider and return its path. Outer
+    /// dir is a fresh UUID, inner dir is named with the style so Finder
+    /// shows the divider style as the folder name.
+    private func ensureDividerSentinel(style: String) -> String? {
+        let outerName = UUID().uuidString
+        let outerDir = dividersRoot.appendingPathComponent(outerName, isDirectory: true)
+        let innerDir = outerDir.appendingPathComponent(style, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: innerDir, withIntermediateDirectories: true)
+            return innerDir.path
+        } catch {
+            return nil
+        }
+    }
+
+    /// Add a divider as a new Library record + a linked Pending row. Each
+    /// call creates a unique sentinel — multiple dividers with identical
+    /// styles are allowed because their underlying URLs differ.
+    func addDivider(style: String) {
+        let trimmed = style.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, !trimmed.contains("/") else {
+            errorMessage = "Invalid divider style"
+            return
+        }
+        guard let sentinelPath = ensureDividerSentinel(style: trimmed) else {
+            errorMessage = "Couldn't create divider folder under ~/.sidesync/dividers/"
+            return
+        }
+
+        var cloudData = cloud ?? CloudFavorites(
+            lastUpdatedBy: machineId,
+            lastUpdatedAt: Date(),
+            favorites: []
+        )
+        let nextOrder = (cloudData.favorites.map(\.order).max() ?? -1) + 1
+        let lib = CloudFavorite(
+            id: UUID().uuidString,
+            name: trimmed,
+            pathHints: [trimmed],
+            order: nextOrder,
+            paths: [machineId: sentinelPath],
+            isDivider: true
+        )
+        cloudData.favorites.append(lib)
+        cloudData.lastUpdatedBy = machineId
+        cloudData.lastUpdatedAt = Date()
+
+        do {
+            try cloudService.write(cloudData)
+            cloud = cloudData
+        } catch {
+            errorMessage = "Couldn't save divider: \(error.localizedDescription)"
+            return
+        }
+
+        var newPending = pending
+        newPending.append(PendingItem(
+            name: trimmed,
+            path: sentinelPath,
+            libraryItemId: lib.id,
+            isDivider: true
+        ))
+        pending = newPending
+        statusMessage = "Added divider to Pending"
+    }
+
+    /// Delete the sentinel folder backing a divider Library record. Called
+    /// from hardDeleteFromLibrary when the record being deleted is a divider.
+    private func cleanupDividerSentinel(_ favorite: CloudFavorite) {
+        guard favorite.isDivider, let path = favorite.paths[machineId] else { return }
+        // Remove the outer UUID dir (parent of the inner styled folder).
+        let outer = (path as NSString).deletingLastPathComponent
+        guard isDividerSentinelPath(path), !outer.isEmpty else { return }
+        try? FileManager.default.removeItem(atPath: outer)
+    }
+
     // MARK: - Drag-and-drop handlers
 
     /// Drop a Library tile onto Pending → add a linked PendingItem (no duplicates).
@@ -1483,12 +1602,12 @@ class AppState {
     /// Insert dropped items at a specific row index in Pending (used by ForEach.onInsert).
     func insertIntoPending(at offset: Int, providers: [NSItemProvider]) {
         Task {
-            let items = await DraggedSidebarItem.decode(from: providers)
+            let result = await DraggedSidebarItem.decode(from: providers)
             await MainActor.run {
                 var newPending = pending
                 var insertAt = min(max(offset, 0), newPending.count)
 
-                for d in items {
+                for d in result.accepted {
                     switch d.source {
                     case .library:
                         guard let lib = cloud?.favorites.first(where: { $0.id == d.identifier }) else { continue }
@@ -1518,6 +1637,19 @@ class AppState {
                     }
                 }
                 pending = newPending
+
+                // Surface rejections (non-folder files) to the user.
+                if !result.rejectedFiles.isEmpty || result.failedURLs > 0 {
+                    var parts: [String] = []
+                    if !result.rejectedFiles.isEmpty {
+                        let n = result.rejectedFiles.count
+                        parts.append("Skipped \(n) file\(n == 1 ? "" : "s") — only folders can live in the Finder sidebar")
+                    }
+                    if result.failedURLs > 0 {
+                        parts.append("\(result.failedURLs) item\(result.failedURLs == 1 ? "" : "s") couldn't be read")
+                    }
+                    errorMessage = parts.joined(separator: " · ")
+                }
             }
         }
     }

@@ -43,14 +43,25 @@ struct DraggedSidebarItem: Codable {
         return provider
     }
 
-    static func decode(from providers: [NSItemProvider]) async -> [DraggedSidebarItem] {
-        var out: [DraggedSidebarItem] = []
+    /// Result of decoding a batch of providers. `accepted` is the items the
+    /// drop handler should process. `rejectedFiles` are non-folder file URLs
+    /// the user dragged (we surface these in the status bar so the user knows
+    /// why nothing happened). `failedURLs` are providers we couldn't load at
+    /// all (rare; usually permissions or sandbox).
+    struct DecodeResult {
+        var accepted: [DraggedSidebarItem] = []
+        var rejectedFiles: [String] = []  // non-folder names
+        var failedURLs: Int = 0
+    }
+
+    static func decode(from providers: [NSItemProvider]) async -> DecodeResult {
+        var result = DecodeResult()
         for provider in providers {
             // 1. SideShot's internal payload (preferred, carries source/identifier)
             if provider.hasItemConformingToTypeIdentifier(typeIdentifier) {
                 if let data = try? await provider.loadDataRepresentation(forTypeIdentifier: typeIdentifier),
                    let item = try? JSONDecoder().decode(DraggedSidebarItem.self, from: data) {
-                    out.append(item)
+                    result.accepted.append(item)
                     continue
                 }
             }
@@ -59,19 +70,23 @@ struct DraggedSidebarItem: Codable {
             //    Treat as a .current-source item — same handlers that work for
             //    in-app current rows will ensureLibraryEntry and link.
             if provider.canLoadObject(ofClass: URL.self) {
-                if let url = await loadURL(from: provider),
-                   url.isFileURL,
-                   isDirectory(at: url) {
-                    out.append(DraggedSidebarItem(
+                guard let url = await loadURL(from: provider), url.isFileURL else {
+                    result.failedURLs += 1
+                    continue
+                }
+                if isDirectory(at: url) {
+                    result.accepted.append(DraggedSidebarItem(
                         source: .current,
                         identifier: "",
                         name: url.lastPathComponent,
                         path: url.path
                     ))
+                } else {
+                    result.rejectedFiles.append(url.lastPathComponent)
                 }
             }
         }
-        return out
+        return result
     }
 
     private static func loadURL(from provider: NSItemProvider) async -> URL? {

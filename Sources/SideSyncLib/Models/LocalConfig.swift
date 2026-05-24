@@ -30,12 +30,34 @@ public struct PendingItem: Codable, Identifiable, Equatable, Hashable {
     public var name: String
     public var path: String
     public var libraryItemId: String?
+    /// Visual divider row (managed sentinel folder under ~/.sidesync/dividers/).
+    public var isDivider: Bool
 
-    public init(id: String = UUID().uuidString, name: String, path: String, libraryItemId: String? = nil) {
+    public init(
+        id: String = UUID().uuidString,
+        name: String,
+        path: String,
+        libraryItemId: String? = nil,
+        isDivider: Bool = false
+    ) {
         self.id = id
         self.name = name
         self.path = path
         self.libraryItemId = libraryItemId
+        self.isDivider = isDivider
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.path = try c.decode(String.self, forKey: .path)
+        self.libraryItemId = try c.decodeIfPresent(String.self, forKey: .libraryItemId)
+        self.isDivider = try c.decodeIfPresent(Bool.self, forKey: .isDivider) ?? false
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, path, libraryItemId, isDivider
     }
 }
 

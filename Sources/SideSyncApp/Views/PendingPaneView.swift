@@ -67,9 +67,9 @@ struct PendingPaneView: View {
         )
         .onDrop(of: [UTType.sideshotSidebarItem, UTType.fileURL], isTargeted: $isDropTargeted) { providers in
             Task {
-                let items = await DraggedSidebarItem.decode(from: providers)
+                let result = await DraggedSidebarItem.decode(from: providers)
                 await MainActor.run {
-                    for d in items {
+                    for d in result.accepted {
                         switch d.source {
                         case .library:
                             state.dropLibraryItemOntoPending(d.identifier)
@@ -79,10 +79,24 @@ struct PendingPaneView: View {
                             break  // self-drag is a no-op (reorder via ▲/▼)
                         }
                     }
+                    reportRejections(result)
                 }
             }
             return true
         }
+    }
+
+    private func reportRejections(_ result: DraggedSidebarItem.DecodeResult) {
+        guard !result.rejectedFiles.isEmpty || result.failedURLs > 0 else { return }
+        var parts: [String] = []
+        if !result.rejectedFiles.isEmpty {
+            let n = result.rejectedFiles.count
+            parts.append("Skipped \(n) file\(n == 1 ? "" : "s") — only folders can live in the Finder sidebar")
+        }
+        if result.failedURLs > 0 {
+            parts.append("\(result.failedURLs) item\(result.failedURLs == 1 ? "" : "s") couldn't be read")
+        }
+        state.errorMessage = parts.joined(separator: " · ")
     }
 }
 
@@ -99,6 +113,69 @@ private struct PendingRow: View {
         let canMoveUp = idx > 0
         let canMoveDown = idx < state.pending.count - 1
 
+        // Divider rows render as a thin horizontal rule with the style label,
+        // not as a regular item row. Keeps the selection + reorder controls.
+        if item.isDivider {
+            dividerBody(idx: idx, canMoveUp: canMoveUp, canMoveDown: canMoveDown, isSelected: isSelected)
+        } else {
+            regularBody(
+                exists: exists, inCurrent: inCurrent, isLinked: isLinked,
+                isSelected: isSelected, canMoveUp: canMoveUp, canMoveDown: canMoveDown
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func dividerBody(idx: Int, canMoveUp: Bool, canMoveDown: Bool, isSelected: Bool) -> some View {
+        HStack(spacing: Theme.Space.sm) {
+            Rectangle()
+                .fill(Theme.Colors.border)
+                .frame(height: 1)
+            Text(item.name)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.tertiary)
+                .help("Divider")
+            Rectangle()
+                .fill(Theme.Colors.border)
+                .frame(height: 1)
+
+            if isSelected {
+                HStack(spacing: 2) {
+                    Button { state.movePendingItem(id: item.id, by: -1) } label: {
+                        Image(systemName: "chevron.up").font(.system(size: 10, weight: .semibold))
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(!canMoveUp)
+                    Button { state.movePendingItem(id: item.id, by: 1) } label: {
+                        Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(!canMoveDown)
+                    Button(role: .destructive) { state.removePendingItem(id: item.id) } label: {
+                        Image(systemName: "minus.circle")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .onDrag {
+            DraggedSidebarItem(
+                source: .pending,
+                identifier: item.id,
+                name: item.name,
+                path: item.path
+            ).makeItemProvider()
+        }
+    }
+
+    @ViewBuilder
+    private func regularBody(
+        exists: Bool, inCurrent: Bool, isLinked: Bool,
+        isSelected: Bool, canMoveUp: Bool, canMoveDown: Bool
+    ) -> some View {
         HStack(spacing: Theme.Space.md) {
             Image(systemName: "folder.fill")
                 .foregroundStyle(Color.blue)

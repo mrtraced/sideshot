@@ -118,6 +118,10 @@ public struct CloudFavorite: Codable, Identifiable, Equatable, Hashable {
     /// Last time this item was applied to a Finder sidebar (any machine).
     /// nil = never used. Powers the Recent / Unused sorts.
     public var lastUsedAt: Date?
+    /// True when this record represents a visual divider (a sentinel folder
+    /// managed by SideShot under ~/.sidesync/dividers/). Renders as a
+    /// horizontal rule in app, and as a divider-styled folder name in Finder.
+    public var isDivider: Bool
 
     // NOTE: Icon customization fields (iconSymbol, iconColor) were removed
     // intentionally. macOS Finder sidebar icons come from FinderSync /
@@ -133,7 +137,8 @@ public struct CloudFavorite: Codable, Identifiable, Equatable, Hashable {
         order: Int,
         paths: [String: String],
         archived: Bool = false,
-        lastUsedAt: Date? = nil
+        lastUsedAt: Date? = nil,
+        isDivider: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -142,6 +147,7 @@ public struct CloudFavorite: Codable, Identifiable, Equatable, Hashable {
         self.paths = paths
         self.archived = archived
         self.lastUsedAt = lastUsedAt
+        self.isDivider = isDivider
     }
 
     public init(from decoder: Decoder) throws {
@@ -153,10 +159,11 @@ public struct CloudFavorite: Codable, Identifiable, Equatable, Hashable {
         self.paths = try c.decode([String: String].self, forKey: .paths)
         self.archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
         self.lastUsedAt = try c.decodeIfPresent(Date.self, forKey: .lastUsedAt)
+        self.isDivider = try c.decodeIfPresent(Bool.self, forKey: .isDivider) ?? false
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, pathHints, order, paths, archived, lastUsedAt
+        case id, name, pathHints, order, paths, archived, lastUsedAt, isDivider
     }
 
     /// Build path hints from a full path (last 2 non-trivial components).
