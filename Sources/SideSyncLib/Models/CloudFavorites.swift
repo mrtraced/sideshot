@@ -118,10 +118,13 @@ public struct CloudFavorite: Codable, Identifiable, Equatable, Hashable {
     /// Last time this item was applied to a Finder sidebar (any machine).
     /// nil = never used. Powers the Recent / Unused sorts.
     public var lastUsedAt: Date?
-    /// SF Symbol name (e.g. "folder.fill", "house.fill"). nil = default (folder.fill).
-    public var iconSymbol: String?
-    /// Color token string (e.g. "blue", "red", "green"). nil = default (blue).
-    public var iconColor: String?
+
+    // NOTE: Icon customization fields (iconSymbol, iconColor) were removed
+    // intentionally. macOS Finder sidebar icons come from FinderSync /
+    // FileProvider extensions, not from a folder's file metadata, so no API
+    // SideShot can call would change the sidebar icon. Older cloud files may
+    // still contain iconSymbol/iconColor keys — JSONDecoder ignores unknown
+    // keys, so they're harmless on read and simply omitted on the next write.
 
     public init(
         id: String,
@@ -130,9 +133,7 @@ public struct CloudFavorite: Codable, Identifiable, Equatable, Hashable {
         order: Int,
         paths: [String: String],
         archived: Bool = false,
-        lastUsedAt: Date? = nil,
-        iconSymbol: String? = nil,
-        iconColor: String? = nil
+        lastUsedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -141,8 +142,6 @@ public struct CloudFavorite: Codable, Identifiable, Equatable, Hashable {
         self.paths = paths
         self.archived = archived
         self.lastUsedAt = lastUsedAt
-        self.iconSymbol = iconSymbol
-        self.iconColor = iconColor
     }
 
     public init(from decoder: Decoder) throws {
@@ -154,12 +153,10 @@ public struct CloudFavorite: Codable, Identifiable, Equatable, Hashable {
         self.paths = try c.decode([String: String].self, forKey: .paths)
         self.archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
         self.lastUsedAt = try c.decodeIfPresent(Date.self, forKey: .lastUsedAt)
-        self.iconSymbol = try c.decodeIfPresent(String.self, forKey: .iconSymbol)
-        self.iconColor = try c.decodeIfPresent(String.self, forKey: .iconColor)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, pathHints, order, paths, archived, lastUsedAt, iconSymbol, iconColor
+        case id, name, pathHints, order, paths, archived, lastUsedAt
     }
 
     /// Build path hints from a full path (last 2 non-trivial components).

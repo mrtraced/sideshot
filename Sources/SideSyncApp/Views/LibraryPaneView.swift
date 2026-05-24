@@ -177,11 +177,11 @@ private struct LibraryTile: View {
 
         VStack(alignment: .leading, spacing: Theme.Space.xs) {
             HStack(spacing: Theme.Space.xs) {
-                Image(systemName: IconStyle.symbol(for: item.iconSymbol))
+                Image(systemName: "folder.fill")
                     .foregroundStyle(
                         inUse
                             ? Color.gray.opacity(0.55)
-                            : IconStyle.color(for: item.iconColor)
+                            : Color.blue.opacity(0.9)
                     )
                     .font(.system(size: 15))
                     .help("Library item — saved across machines")

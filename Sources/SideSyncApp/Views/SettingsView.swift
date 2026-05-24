@@ -177,16 +177,6 @@ private struct BehaviorSettingsTab: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Section("Apply") {
-                Toggle(
-                    "Write custom SF Symbol icons to folders on Apply",
-                    isOn: bind(\.writeFinderIconsOnApply)
-                )
-                Text("When on, each Library item's custom icon is rendered to a multi-resolution NSImage and written onto the corresponding folder via NSWorkspace. Some folders (Applications, iCloud Drive root, read-only volumes) refuse this and will be reported in the status message.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .formStyle(.grouped)
     }

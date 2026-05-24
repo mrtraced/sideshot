@@ -73,8 +73,6 @@ public struct LocalConfig: Codable {
     public var autoImportOnLaunch: Bool
     /// Seed the standard macOS locations into Library on launch.
     public var seedDefaultsOnLaunch: Bool
-    /// Write custom SF Symbol icons to folders when applying Pending → Finder.
-    public var writeFinderIconsOnApply: Bool
     /// Default sort mode for the Library grid (alpha / recent / unused).
     public var defaultLibrarySort: String
     /// In the Apply Pending alert, is "Save Current & Apply" the default action?
@@ -82,9 +80,6 @@ public struct LocalConfig: Codable {
     /// Maximum snapshots to keep per machine. 0 = no limit (default).
     /// On save, older snapshots beyond this count are pruned.
     public var maxSnapshotsPerMachine: Int
-    /// Recently used SF Symbol names in the icon picker. Most-recent first;
-    /// trimmed to a cap so the picker's Recently Used row stays compact.
-    public var recentIconSymbols: [String]
     /// True once the user has approved the permissions warmup (which front-
     /// loads TCC prompts for Desktop/Documents/Downloads/etc. into one
     /// session rather than letting them dribble out during Apply).
@@ -101,11 +96,9 @@ public struct LocalConfig: Codable {
         cloudSyncDirectory: String? = nil,
         autoImportOnLaunch: Bool = true,
         seedDefaultsOnLaunch: Bool = true,
-        writeFinderIconsOnApply: Bool = true,
         defaultLibrarySort: String = "alpha",
         saveBeforeApplyDefault: Bool = true,
         maxSnapshotsPerMachine: Int = 0,
-        recentIconSymbols: [String] = [],
         permissionsWarmupCompleted: Bool = false
     ) {
         self.machineId = machineId
@@ -118,11 +111,9 @@ public struct LocalConfig: Codable {
         self.cloudSyncDirectory = cloudSyncDirectory
         self.autoImportOnLaunch = autoImportOnLaunch
         self.seedDefaultsOnLaunch = seedDefaultsOnLaunch
-        self.writeFinderIconsOnApply = writeFinderIconsOnApply
         self.defaultLibrarySort = defaultLibrarySort
         self.saveBeforeApplyDefault = saveBeforeApplyDefault
         self.maxSnapshotsPerMachine = maxSnapshotsPerMachine
-        self.recentIconSymbols = recentIconSymbols
         self.permissionsWarmupCompleted = permissionsWarmupCompleted
     }
 
@@ -138,18 +129,16 @@ public struct LocalConfig: Codable {
         self.cloudSyncDirectory = try c.decodeIfPresent(String.self, forKey: .cloudSyncDirectory)
         self.autoImportOnLaunch = try c.decodeIfPresent(Bool.self, forKey: .autoImportOnLaunch) ?? true
         self.seedDefaultsOnLaunch = try c.decodeIfPresent(Bool.self, forKey: .seedDefaultsOnLaunch) ?? true
-        self.writeFinderIconsOnApply = try c.decodeIfPresent(Bool.self, forKey: .writeFinderIconsOnApply) ?? true
         self.defaultLibrarySort = try c.decodeIfPresent(String.self, forKey: .defaultLibrarySort) ?? "alpha"
         self.saveBeforeApplyDefault = try c.decodeIfPresent(Bool.self, forKey: .saveBeforeApplyDefault) ?? true
         self.maxSnapshotsPerMachine = try c.decodeIfPresent(Int.self, forKey: .maxSnapshotsPerMachine) ?? 0
-        self.recentIconSymbols = try c.decodeIfPresent([String].self, forKey: .recentIconSymbols) ?? []
         self.permissionsWarmupCompleted = try c.decodeIfPresent(Bool.self, forKey: .permissionsWarmupCompleted) ?? false
     }
 
     private enum CodingKeys: String, CodingKey {
         case machineId, role, hiddenFavorites, pathOverrides, localOnlyFavorites, pending, ignoredLibraryKeys
-        case cloudSyncDirectory, autoImportOnLaunch, seedDefaultsOnLaunch, writeFinderIconsOnApply
-        case defaultLibrarySort, saveBeforeApplyDefault, maxSnapshotsPerMachine, recentIconSymbols
+        case cloudSyncDirectory, autoImportOnLaunch, seedDefaultsOnLaunch
+        case defaultLibrarySort, saveBeforeApplyDefault, maxSnapshotsPerMachine
         case permissionsWarmupCompleted
     }
 

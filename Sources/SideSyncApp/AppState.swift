@@ -925,8 +925,6 @@ class AppState {
 
         var applied = 0
         var skipped: [String] = []
-        var iconsWritten = 0
-        var iconsFailed: [String] = []
 
         for item in items {
             let linkedLib: CloudFavorite? = item.libraryItemId.flatMap { id in
@@ -955,24 +953,6 @@ class AppState {
                         markLibraryItemUsed(libId)
                     }
 
-                    // Push custom icon to the folder if the linked Library record
-                    // carries one AND the user has icon-writing enabled. Failures
-                    // (read-only, system-owned, etc.) are collected but don't
-                    // abort the apply.
-                    if config.writeFinderIconsOnApply,
-                       let lib = linkedLib, let symbol = lib.iconSymbol {
-                        let color = FinderIconWriter.nsColor(forToken: lib.iconColor)
-                        let ok = FinderIconWriter.writeIcon(
-                            symbol: symbol,
-                            color: color,
-                            toFile: path
-                        )
-                        if ok {
-                            iconsWritten += 1
-                        } else {
-                            iconsFailed.append(item.name)
-                        }
-                    }
                 }
             } catch {
                 skipped.append(item.name)
@@ -980,11 +960,7 @@ class AppState {
         }
 
         var msg = "Applied \(applied) items"
-        if iconsWritten > 0 { msg += ", \(iconsWritten) custom icon\(iconsWritten == 1 ? "" : "s")" }
         if !skipped.isEmpty { msg += " · skipped \(skipped.count): \(skipped.joined(separator: ", "))" }
-        if !iconsFailed.isEmpty {
-            msg += " · icon write failed: \(iconsFailed.joined(separator: ", "))"
-        }
         statusMessage = msg
         refresh()
     }
@@ -1409,24 +1385,6 @@ class AppState {
         }
     }
 
-    /// Update the icon style (SF Symbol + color token) on a Library record.
-    /// Passing nil clears the override (back to defaults).
-    func updateLibraryIcon(_ favorite: CloudFavorite, symbol: String?, color: String?) {
-        guard var cloudData = cloud,
-              let idx = cloudData.favorites.firstIndex(where: { $0.id == favorite.id }) else { return }
-        cloudData.favorites[idx].iconSymbol = symbol
-        cloudData.favorites[idx].iconColor = color
-        cloudData.lastUpdatedBy = machineId
-        cloudData.lastUpdatedAt = Date()
-        do {
-            try cloudService.write(cloudData)
-            cloud = cloudData
-            if let symbol { noteSymbolUsed(symbol) }
-        } catch {
-            errorMessage = "Failed to update icon: \(error.localizedDescription)"
-        }
-    }
-
     /// Re-trigger the permissions warmup. Useful when the user has revoked
     /// access or migrated machines. Resets the "completed" flag so the next
     /// launch will also warm up.
@@ -1435,15 +1393,6 @@ class AppState {
         config.permissionsWarmupCompleted = true
         try? configService.write(config)
         statusMessage = "Permissions warmup: touched \(touched.count) folder\(touched.count == 1 ? "" : "s")"
-    }
-
-    /// Bump a symbol to the front of recentIconSymbols (capped to 12).
-    private func noteSymbolUsed(_ symbol: String) {
-        var recent = config.recentIconSymbols.filter { $0 != symbol }
-        recent.insert(symbol, at: 0)
-        if recent.count > 12 { recent = Array(recent.prefix(12)) }
-        config.recentIconSymbols = recent
-        try? configService.write(config)
     }
 
     /// Rename a Library record, syncing any linked Pending items.

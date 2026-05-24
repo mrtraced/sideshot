@@ -99,17 +99,9 @@ private struct PendingRow: View {
         let canMoveUp = idx > 0
         let canMoveDown = idx < state.pending.count - 1
 
-        // Resolve icon via the linked Library record (if any) so customization
-        // propagates from the canonical record.
-        let linkedLib: CloudFavorite? = item.libraryItemId.flatMap { id in
-            state.cloud?.favorites.first(where: { $0.id == id })
-        }
-        let iconSymbol = IconStyle.symbol(for: linkedLib?.iconSymbol)
-        let iconColor = IconStyle.color(for: linkedLib?.iconColor)
-
         HStack(spacing: Theme.Space.md) {
-            Image(systemName: iconSymbol)
-                .foregroundStyle(iconColor)
+            Image(systemName: "folder.fill")
+                .foregroundStyle(Color.blue)
                 .font(.system(size: 15))
                 .help("Sidebar item")
 
