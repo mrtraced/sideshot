@@ -289,6 +289,17 @@ private struct ResetSettingsTab: View {
                 }
             }
 
+            Section("Permissions") {
+                actionRow(
+                    title: "Re-request Folder Access",
+                    description: "Touches Desktop, Documents, Downloads, iCloud Drive, and other standard folders to surface macOS permission prompts up front (instead of mid-Apply). Use after revoking access in System Settings or migrating machines.",
+                    actionTitle: "Re-request",
+                    role: nil
+                ) {
+                    state.rerequestPermissions()
+                }
+            }
+
             Section("Cloud") {
                 actionRow(
                     title: "Wipe Cloud Sync File",

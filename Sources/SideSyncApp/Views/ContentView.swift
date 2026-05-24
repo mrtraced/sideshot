@@ -3,6 +3,7 @@ import SideSyncLib
 
 struct ContentView: View {
     @Environment(AppState.self) private var state
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
         @Bindable var state = state
@@ -17,7 +18,7 @@ struct ContentView: View {
     private var splitView: some View {
         @Bindable var state = state
 
-        NavigationSplitView(columnVisibility: .constant(.all)) {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
         } content: {

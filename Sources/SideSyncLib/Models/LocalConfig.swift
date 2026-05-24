@@ -85,6 +85,10 @@ public struct LocalConfig: Codable {
     /// Recently used SF Symbol names in the icon picker. Most-recent first;
     /// trimmed to a cap so the picker's Recently Used row stays compact.
     public var recentIconSymbols: [String]
+    /// True once the user has approved the permissions warmup (which front-
+    /// loads TCC prompts for Desktop/Documents/Downloads/etc. into one
+    /// session rather than letting them dribble out during Apply).
+    public var permissionsWarmupCompleted: Bool
 
     public init(
         machineId: String = "",
@@ -101,7 +105,8 @@ public struct LocalConfig: Codable {
         defaultLibrarySort: String = "alpha",
         saveBeforeApplyDefault: Bool = true,
         maxSnapshotsPerMachine: Int = 0,
-        recentIconSymbols: [String] = []
+        recentIconSymbols: [String] = [],
+        permissionsWarmupCompleted: Bool = false
     ) {
         self.machineId = machineId
         self.role = role
@@ -118,6 +123,7 @@ public struct LocalConfig: Codable {
         self.saveBeforeApplyDefault = saveBeforeApplyDefault
         self.maxSnapshotsPerMachine = maxSnapshotsPerMachine
         self.recentIconSymbols = recentIconSymbols
+        self.permissionsWarmupCompleted = permissionsWarmupCompleted
     }
 
     public init(from decoder: Decoder) throws {
@@ -137,12 +143,14 @@ public struct LocalConfig: Codable {
         self.saveBeforeApplyDefault = try c.decodeIfPresent(Bool.self, forKey: .saveBeforeApplyDefault) ?? true
         self.maxSnapshotsPerMachine = try c.decodeIfPresent(Int.self, forKey: .maxSnapshotsPerMachine) ?? 0
         self.recentIconSymbols = try c.decodeIfPresent([String].self, forKey: .recentIconSymbols) ?? []
+        self.permissionsWarmupCompleted = try c.decodeIfPresent(Bool.self, forKey: .permissionsWarmupCompleted) ?? false
     }
 
     private enum CodingKeys: String, CodingKey {
         case machineId, role, hiddenFavorites, pathOverrides, localOnlyFavorites, pending, ignoredLibraryKeys
         case cloudSyncDirectory, autoImportOnLaunch, seedDefaultsOnLaunch, writeFinderIconsOnApply
         case defaultLibrarySort, saveBeforeApplyDefault, maxSnapshotsPerMachine, recentIconSymbols
+        case permissionsWarmupCompleted
     }
 
     public static let defaultConfig = LocalConfig()

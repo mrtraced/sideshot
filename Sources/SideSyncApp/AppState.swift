@@ -115,6 +115,17 @@ class AppState {
         self.sidebarService = try? SidebarService()
 
         refresh()
+
+        // First launch: batch the macOS TCC prompts for Desktop / Documents /
+        // Downloads / iCloud Drive / etc. all at once so they don't dribble
+        // out during Apply. Subsequent launches skip — macOS remembers grants
+        // per code-signature.
+        if !config.permissionsWarmupCompleted {
+            PermissionsWarmup.warmUp()
+            config.permissionsWarmupCompleted = true
+            try? configService.write(config)
+        }
+
         if config.autoImportOnLaunch { autoImportCurrentToLibrary() }
         if config.seedDefaultsOnLaunch { seedLibraryDefaults() }
         linkPendingToLibrary()
@@ -1414,6 +1425,16 @@ class AppState {
         } catch {
             errorMessage = "Failed to update icon: \(error.localizedDescription)"
         }
+    }
+
+    /// Re-trigger the permissions warmup. Useful when the user has revoked
+    /// access or migrated machines. Resets the "completed" flag so the next
+    /// launch will also warm up.
+    func rerequestPermissions() {
+        let touched = PermissionsWarmup.warmUp()
+        config.permissionsWarmupCompleted = true
+        try? configService.write(config)
+        statusMessage = "Permissions warmup: touched \(touched.count) folder\(touched.count == 1 ? "" : "s")"
     }
 
     /// Bump a symbol to the front of recentIconSymbols (capped to 12).
