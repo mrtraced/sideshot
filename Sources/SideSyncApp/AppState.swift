@@ -836,6 +836,57 @@ class AppState {
         cloud = cloudData
     }
 
+    // MARK: - Pending vs Current diff
+
+    struct PendingDiff {
+        struct Entry: Identifiable {
+            let id = UUID().uuidString
+            let name: String
+            let path: String
+        }
+        struct Reorder: Identifiable {
+            let id = UUID().uuidString
+            let name: String
+            let fromIndex: Int  // position in Current
+            let toIndex: Int    // position in Pending
+        }
+        var added: [Entry] = []
+        var removed: [Entry] = []
+        var reordered: [Reorder] = []
+
+        var isEmpty: Bool { added.isEmpty && removed.isEmpty && reordered.isEmpty }
+    }
+
+    /// Compare Pending against the live Finder sidebar to show the user what
+    /// Apply will change. Comparison is on normalized path (trailing slash removed).
+    var pendingDiff: PendingDiff {
+        var diff = PendingDiff()
+        let normalize: (String) -> String = { p in
+            p.hasSuffix("/") ? String(p.dropLast()) : p
+        }
+        let pendingPaths = pending.map { normalize($0.path) }
+        let currentPaths = localFavorites.map { normalize($0.path) }
+        let pendingSet = Set(pendingPaths)
+        let currentSet = Set(currentPaths)
+
+        for (i, item) in pending.enumerated() {
+            let np = normalize(item.path)
+            if !currentSet.contains(np) {
+                diff.added.append(.init(name: item.name, path: item.path))
+            } else if let fromIdx = currentPaths.firstIndex(of: np), fromIdx != i {
+                diff.reordered.append(.init(name: item.name, fromIndex: fromIdx, toIndex: i))
+            }
+        }
+        for (i, fav) in localFavorites.enumerated() {
+            let np = normalize(fav.path)
+            if !pendingSet.contains(np) {
+                diff.removed.append(.init(name: fav.name, path: fav.path))
+            }
+            _ = i
+        }
+        return diff
+    }
+
     // MARK: - Apply Pending to Finder
 
     /// Wipe the Finder sidebar and rebuild it from Pending, in order.

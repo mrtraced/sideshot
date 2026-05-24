@@ -46,17 +46,46 @@ struct DraggedSidebarItem: Codable {
     static func decode(from providers: [NSItemProvider]) async -> [DraggedSidebarItem] {
         var out: [DraggedSidebarItem] = []
         for provider in providers {
-            guard provider.hasItemConformingToTypeIdentifier(typeIdentifier) else { continue }
-            do {
-                let data = try await provider.loadDataRepresentation(forTypeIdentifier: typeIdentifier)
-                if let item = try? JSONDecoder().decode(DraggedSidebarItem.self, from: data) {
+            // 1. SideShot's internal payload (preferred, carries source/identifier)
+            if provider.hasItemConformingToTypeIdentifier(typeIdentifier) {
+                if let data = try? await provider.loadDataRepresentation(forTypeIdentifier: typeIdentifier),
+                   let item = try? JSONDecoder().decode(DraggedSidebarItem.self, from: data) {
                     out.append(item)
+                    continue
                 }
-            } catch {
-                continue
+            }
+
+            // 2. Folder URL dragged in from Finder (or any app exporting public.file-url).
+            //    Treat as a .current-source item — same handlers that work for
+            //    in-app current rows will ensureLibraryEntry and link.
+            if provider.canLoadObject(ofClass: URL.self) {
+                if let url = await loadURL(from: provider),
+                   url.isFileURL,
+                   isDirectory(at: url) {
+                    out.append(DraggedSidebarItem(
+                        source: .current,
+                        identifier: "",
+                        name: url.lastPathComponent,
+                        path: url.path
+                    ))
+                }
             }
         }
         return out
+    }
+
+    private static func loadURL(from provider: NSItemProvider) async -> URL? {
+        await withCheckedContinuation { continuation in
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                continuation.resume(returning: url)
+            }
+        }
+    }
+
+    private static func isDirectory(at url: URL) -> Bool {
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else { return false }
+        return isDir.boolValue
     }
 }
 

@@ -60,7 +60,7 @@ struct PendingPaneView: View {
                             .tag(item.id as String?)
                     }
                     .onMove(perform: state.reorderPending)
-                    .onInsert(of: [UTType.sideshotSidebarItem], perform: state.insertIntoPending)
+                    .onInsert(of: [UTType.sideshotSidebarItem, UTType.fileURL], perform: state.insertIntoPending)
                 }
                 .listStyle(.inset)
             }
@@ -74,7 +74,7 @@ struct PendingPaneView: View {
                     .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
                 : nil
         )
-        .onDrop(of: [UTType.sideshotSidebarItem], isTargeted: $isDropTargeted) { providers in
+        .onDrop(of: [UTType.sideshotSidebarItem, UTType.fileURL], isTargeted: $isDropTargeted) { providers in
             Task {
                 let items = await DraggedSidebarItem.decode(from: providers)
                 await MainActor.run {

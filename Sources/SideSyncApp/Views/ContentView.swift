@@ -81,20 +81,8 @@ struct ContentView: View {
         } message: {
             Text("Removes all items from pending. The Library is unaffected.")
         }
-        .alert("Apply Pending to Finder Sidebar?", isPresented: $state.showApplyPendingConfirm) {
-            Button("Save Current & Apply") {
-                state.pendingApplyToFinderAfterSave = true
-                state.showSaveSnapshotSheet = true
-            }
-            .keyboardShortcut(.defaultAction)
-
-            Button("Apply", role: .destructive) {
-                state.applyPendingToFinder()
-            }
-
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This replaces the Finder sidebar with the \(state.pending.count) item\(state.pending.count == 1 ? "" : "s") in Pending. Save the current sidebar as a snapshot first to make it reversible.")
+        .sheet(isPresented: $state.showApplyPendingConfirm) {
+            ApplyPendingPreviewSheet()
         }
     }
 

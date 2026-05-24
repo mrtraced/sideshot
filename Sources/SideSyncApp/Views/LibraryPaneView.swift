@@ -36,7 +36,7 @@ struct LibraryPaneView: View {
                     .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
                 : nil
         )
-        .onDrop(of: [UTType.sideshotSidebarItem], isTargeted: $isDropTargeted) { providers in
+        .onDrop(of: [UTType.sideshotSidebarItem, UTType.fileURL], isTargeted: $isDropTargeted) { providers in
             guard !state.showArchivedLibrary else { return false }  // archive view doesn't accept drops
             Task {
                 let items = await DraggedSidebarItem.decode(from: providers)
