@@ -81,22 +81,50 @@ enum FinderIconWriter {
         return rep
     }
 
-    /// Write the rendered icon onto the folder at `path` via NSWorkspace.
-    /// - Throws: if the path doesn't exist, isn't writable, or the system
-    ///   refuses (e.g. read-only volumes, /Applications, iCloud Drive root).
-    /// - Returns: true if the icon was set, false if the path doesn't exist.
+    /// Write the rendered icon onto the folder at `path` via NSWorkspace, then
+    /// nudge Finder to re-render the sidebar/icon-view cache for that folder.
+    /// - Returns: true if the icon was set, false if the path doesn't exist or
+    ///   the system refused (read-only volumes, system-owned folders, etc.).
     @discardableResult
     static func writeIcon(symbol: String, color: NSColor, toFile path: String) -> Bool {
         guard FileManager.default.fileExists(atPath: path) else { return false }
         guard let image = renderIcon(symbol: symbol, color: color) else { return false }
-        return NSWorkspace.shared.setIcon(image, forFile: path, options: [])
+        let ok = NSWorkspace.shared.setIcon(image, forFile: path, options: [])
+        if ok { invalidateFinderCache(at: path) }
+        return ok
     }
 
     /// Clear any custom icon from the folder, restoring the system default.
     @discardableResult
     static func clearIcon(forFile path: String) -> Bool {
         guard FileManager.default.fileExists(atPath: path) else { return false }
-        return NSWorkspace.shared.setIcon(nil, forFile: path, options: [])
+        let ok = NSWorkspace.shared.setIcon(nil, forFile: path, options: [])
+        if ok { invalidateFinderCache(at: path) }
+        return ok
+    }
+
+    /// Force Finder to drop its cached icon for this path. We do three things:
+    /// 1. NSWorkspace.noteFileSystemChanged(_) — the documented way to tell
+    ///    Workspace (and by extension Finder) that the file metadata changed.
+    /// 2. Touch the folder's modification date so FSEvents fires (catches
+    ///    Finder if it's filtering on mod-time).
+    /// 3. Bump the parent directory's mod time too, since the sidebar's
+    ///    icon cache for an item is sometimes keyed off the enclosing dir.
+    private static func invalidateFinderCache(at path: String) {
+        NSWorkspace.shared.noteFileSystemChanged(path)
+        let now = Date()
+        try? FileManager.default.setAttributes(
+            [.modificationDate: now],
+            ofItemAtPath: path
+        )
+        let parent = (path as NSString).deletingLastPathComponent
+        if !parent.isEmpty {
+            try? FileManager.default.setAttributes(
+                [.modificationDate: now],
+                ofItemAtPath: parent
+            )
+            NSWorkspace.shared.noteFileSystemChanged(parent)
+        }
     }
 
     /// Translate a SwiftUI Color token to an NSColor.

@@ -53,6 +53,16 @@ struct IconPickerView: View {
                     .truncationMode(.middle)
             }
             Spacer()
+            if favorite.iconSymbol != nil {
+                Button {
+                    applyIconToFinderNow()
+                } label: {
+                    Label("Push to Finder", systemImage: "square.and.arrow.down.on.square")
+                        .font(.system(size: 10))
+                }
+                .buttonStyle(.borderless)
+                .help("Write this icon to the folder on disk right now (no need to Apply Pending)")
+            }
             if favorite.iconSymbol != nil || favorite.iconColor != nil {
                 Button {
                     state.updateLibraryIcon(favorite, symbol: nil, color: nil)
@@ -63,6 +73,23 @@ struct IconPickerView: View {
                 .buttonStyle(.borderless)
                 .help("Clear custom icon — go back to default folder")
             }
+        }
+    }
+
+    private func applyIconToFinderNow() {
+        guard let symbol = favorite.iconSymbol else { return }
+        // Resolve this machine's path for the favorite.
+        guard let path = PathResolver.resolveLocalPath(
+            for: favorite, machineId: state.machineId, config: state.config
+        ) ?? favorite.paths[state.machineId] else {
+            state.errorMessage = "No usable local path for \"\(favorite.name)\""
+            return
+        }
+        let color = FinderIconWriter.nsColor(forToken: favorite.iconColor)
+        if FinderIconWriter.writeIcon(symbol: symbol, color: color, toFile: path) {
+            state.statusMessage = "Wrote icon to \"\(favorite.name)\" — Finder may take a moment to refresh"
+        } else {
+            state.errorMessage = "Couldn't write icon to \"\(favorite.name)\" (read-only or system folder?)"
         }
     }
 
