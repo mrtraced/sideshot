@@ -59,6 +59,24 @@ class AppState {
             case .unused: return "tray"
             }
         }
+
+        /// Lowercase persistence key used in LocalConfig.defaultLibrarySort.
+        var settingKey: String {
+            switch self {
+            case .alpha: return "alpha"
+            case .recent: return "recent"
+            case .unused: return "unused"
+            }
+        }
+
+        init?(rawSetting: String) {
+            switch rawSetting.lowercased() {
+            case "alpha": self = .alpha
+            case "recent": self = .recent
+            case "unused": self = .unused
+            default: return nil
+            }
+        }
     }
     var librarySort: LibrarySort = .alpha
     /// When true, the Library pane shows archived items with hover-delete affordance.
@@ -82,16 +100,23 @@ class AppState {
 
     init() {
         self.configService = ConfigService()
-        self.cloudService = CloudService()
-        self.config = configService.read()
+        let loadedConfig = configService.read()
+        // Honor custom cloud directory override, if any.
+        let customDir = loadedConfig.cloudSyncDirectory.map { URL(fileURLWithPath: $0) }
+        self.cloudService = CloudService(directory: customDir)
+        self.config = loadedConfig
         self.machineId = configService.getMachineId()
+        // Apply saved default sort.
+        if let sort = LibrarySort(rawSetting: loadedConfig.defaultLibrarySort) {
+            self.librarySort = sort
+        }
 
         // SidebarService can fail if API unavailable
         self.sidebarService = try? SidebarService()
 
         refresh()
-        autoImportCurrentToLibrary()
-        seedLibraryDefaults()
+        if config.autoImportOnLaunch { autoImportCurrentToLibrary() }
+        if config.seedDefaultsOnLaunch { seedLibraryDefaults() }
         linkPendingToLibrary()
 
         // First-run init: seed pending from Current if it's empty.
@@ -281,6 +306,170 @@ class AppState {
         }
     }
 
+    // MARK: - Settings-driven actions
+
+    /// Apply a new cloud directory. Optionally migrate the existing favorites.json.
+    func setCloudDirectory(_ url: URL, migrateExisting: Bool) {
+        do {
+            if migrateExisting && cloudService.hasCloudFile {
+                try cloudService.migrate(to: url, overwrite: false)
+            } else {
+                cloudService.setDirectory(url)
+            }
+            config.cloudSyncDirectory = url.path
+            try configService.write(config)
+            statusMessage = "Cloud directory set to \(url.path)"
+            refresh()
+        } catch {
+            errorMessage = "Couldn't set cloud directory: \(error.localizedDescription)"
+        }
+    }
+
+    /// Restore default iCloud directory (clears the override).
+    func resetCloudDirectoryToDefault() {
+        cloudService.setDirectory(CloudService.defaultDirectory)
+        config.cloudSyncDirectory = nil
+        try? configService.write(config)
+        statusMessage = "Cloud directory reset to iCloud Drive default"
+        refresh()
+    }
+
+    // MARK: - Reset actions
+
+    /// Permanently delete every archived Library item.
+    func deleteAllArchived() {
+        guard var cloudData = cloud else { return }
+        let archivedIds = Set(cloudData.favorites.filter { $0.archived }.map(\.id))
+        guard !archivedIds.isEmpty else {
+            statusMessage = "No archived items to delete"
+            return
+        }
+        cloudData.favorites.removeAll { $0.archived }
+        cloudData.lastUpdatedBy = machineId
+        cloudData.lastUpdatedAt = Date()
+
+        // Unlink any Pending row whose id was just removed
+        var newPending = config.pending
+        for i in newPending.indices {
+            if let libId = newPending[i].libraryItemId, archivedIds.contains(libId) {
+                newPending[i].libraryItemId = nil
+            }
+        }
+
+        do {
+            try cloudService.write(cloudData)
+            config.pending = newPending
+            try configService.write(config)
+            statusMessage = "Deleted \(archivedIds.count) archived item\(archivedIds.count == 1 ? "" : "s")"
+            refresh()
+        } catch {
+            errorMessage = "Failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Clear the ignored-keys set so auto-import / seed-defaults can re-add
+    /// items that were previously deleted.
+    func restoreIgnoredLibraryItems() {
+        let count = config.ignoredLibraryKeys.count
+        guard count > 0 else {
+            statusMessage = "No ignored items to restore"
+            return
+        }
+        config.ignoredLibraryKeys.removeAll()
+        try? configService.write(config)
+        autoImportCurrentToLibrary()
+        seedLibraryDefaults()
+        statusMessage = "Restored \(count) ignored key\(count == 1 ? "" : "s"); re-seeded defaults"
+        refresh()
+    }
+
+    /// Reset local config to defaults. Optionally preserve the machine name.
+    func resetLocalConfig(keepMachineName: Bool) {
+        let name = keepMachineName ? config.machineId : ""
+        let fresh = LocalConfig(
+            machineId: name,
+            role: .primary
+        )
+        config = fresh
+        try? configService.write(config)
+        // Re-seed pending from current.
+        if !localFavorites.isEmpty {
+            resetPendingToCurrent()
+        }
+        cloudService.setDirectory(CloudService.defaultDirectory)
+        statusMessage = "Local app config reset"
+        refresh()
+    }
+
+    /// Permanently delete the cloud favorites file. Other machines lose
+    /// access to the snapshots/Library on next sync.
+    func wipeCloudFile() {
+        do {
+            try cloudService.wipeFile()
+            cloud = nil
+            selectedCloudFavorite = nil
+            // Also blank out any Pending links to it.
+            var newPending = config.pending
+            for i in newPending.indices { newPending[i].libraryItemId = nil }
+            config.pending = newPending
+            try? configService.write(config)
+            statusMessage = "Cloud file deleted"
+            refresh()
+        } catch {
+            errorMessage = "Wipe failed: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Snapshot retention
+
+    /// Prune oldest snapshots for this machine beyond config.maxSnapshotsPerMachine.
+    /// No-op when limit is 0.
+    func pruneSnapshotsIfNeeded() {
+        let limit = config.maxSnapshotsPerMachine
+        guard limit > 0,
+              var cloudData = cloud,
+              var bucket = cloudData.snapshots else { return }
+        var changed = false
+        for (machine, list) in bucket {
+            guard list.count > limit else { continue }
+            let sorted = list.sorted { $0.timestamp > $1.timestamp }
+            bucket[machine] = Array(sorted.prefix(limit))
+            changed = true
+        }
+        if changed {
+            cloudData.snapshots = bucket
+            cloudData.lastUpdatedBy = machineId
+            cloudData.lastUpdatedAt = Date()
+            try? cloudService.write(cloudData)
+            cloud = cloudData
+        }
+    }
+
+    // MARK: - Diagnostics
+
+    /// Reveal the cloud favorites file in Finder. If it doesn't exist yet,
+    /// reveals the directory.
+    func revealCloudFileInFinder() {
+        let target = cloudService.hasCloudFile ? cloudService.cloudFile : cloudService.directory
+        NSWorkspace.shared.activateFileViewerSelecting([target])
+    }
+
+    /// Reveal the local config.json in Finder.
+    func revealConfigFileInFinder() {
+        let path = ConfigService.configFile
+        if FileManager.default.fileExists(atPath: path.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([path])
+        } else {
+            NSWorkspace.shared.activateFileViewerSelecting([ConfigService.configDirectory])
+        }
+    }
+
+    /// Current cloud directory path for display in Settings.
+    var cloudDirectoryPath: String { cloudService.directory.path }
+
+    /// Local config file path for display in Settings.
+    var configFilePath: String { ConfigService.configFile.path }
+
     /// Build a default snapshot name from machine + date.
     static func defaultSnapshotName(machineId: String, date: Date) -> String {
         let fmt = DateFormatter()
@@ -325,6 +514,8 @@ class AppState {
             cloudData.lastUpdatedAt = Date()
 
             try cloudService.write(cloudData)
+            cloud = cloudData
+            pruneSnapshotsIfNeeded()
             statusMessage = "Saved snapshot \"\(finalName)\""
             refresh()
         } catch {
@@ -703,9 +894,11 @@ class AppState {
                     }
 
                     // Push custom icon to the folder if the linked Library record
-                    // carries one. Failures (read-only, system-owned, etc.) are
-                    // collected but don't abort the apply.
-                    if let lib = linkedLib, let symbol = lib.iconSymbol {
+                    // carries one AND the user has icon-writing enabled. Failures
+                    // (read-only, system-owned, etc.) are collected but don't
+                    // abort the apply.
+                    if config.writeFinderIconsOnApply,
+                       let lib = linkedLib, let symbol = lib.iconSymbol {
                         let color = FinderIconWriter.nsColor(forToken: lib.iconColor)
                         let ok = FinderIconWriter.writeIcon(
                             symbol: symbol,

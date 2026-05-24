@@ -64,6 +64,25 @@ public struct LocalConfig: Codable {
     /// Library dedup keys the user has explicitly removed; auto-import will not re-add them.
     public var ignoredLibraryKeys: Set<String>
 
+    // MARK: - User settings (with sensible defaults)
+
+    /// Absolute path to the directory where favorites.json lives.
+    /// nil = use the default iCloud Drive location.
+    public var cloudSyncDirectory: String?
+    /// Automatically copy Current items into Library on launch.
+    public var autoImportOnLaunch: Bool
+    /// Seed the standard macOS locations into Library on launch.
+    public var seedDefaultsOnLaunch: Bool
+    /// Write custom SF Symbol icons to folders when applying Pending → Finder.
+    public var writeFinderIconsOnApply: Bool
+    /// Default sort mode for the Library grid (alpha / recent / unused).
+    public var defaultLibrarySort: String
+    /// In the Apply Pending alert, is "Save Current & Apply" the default action?
+    public var saveBeforeApplyDefault: Bool
+    /// Maximum snapshots to keep per machine. 0 = no limit (default).
+    /// On save, older snapshots beyond this count are pruned.
+    public var maxSnapshotsPerMachine: Int
+
     public init(
         machineId: String = "",
         role: SyncRole = .primary,
@@ -71,7 +90,14 @@ public struct LocalConfig: Codable {
         pathOverrides: [String: String] = [:],
         localOnlyFavorites: Set<String> = [],
         pending: [PendingItem] = [],
-        ignoredLibraryKeys: Set<String> = []
+        ignoredLibraryKeys: Set<String> = [],
+        cloudSyncDirectory: String? = nil,
+        autoImportOnLaunch: Bool = true,
+        seedDefaultsOnLaunch: Bool = true,
+        writeFinderIconsOnApply: Bool = true,
+        defaultLibrarySort: String = "alpha",
+        saveBeforeApplyDefault: Bool = true,
+        maxSnapshotsPerMachine: Int = 0
     ) {
         self.machineId = machineId
         self.role = role
@@ -80,6 +106,13 @@ public struct LocalConfig: Codable {
         self.localOnlyFavorites = localOnlyFavorites
         self.pending = pending
         self.ignoredLibraryKeys = ignoredLibraryKeys
+        self.cloudSyncDirectory = cloudSyncDirectory
+        self.autoImportOnLaunch = autoImportOnLaunch
+        self.seedDefaultsOnLaunch = seedDefaultsOnLaunch
+        self.writeFinderIconsOnApply = writeFinderIconsOnApply
+        self.defaultLibrarySort = defaultLibrarySort
+        self.saveBeforeApplyDefault = saveBeforeApplyDefault
+        self.maxSnapshotsPerMachine = maxSnapshotsPerMachine
     }
 
     public init(from decoder: Decoder) throws {
@@ -91,10 +124,19 @@ public struct LocalConfig: Codable {
         self.localOnlyFavorites = try c.decodeIfPresent(Set<String>.self, forKey: .localOnlyFavorites) ?? []
         self.pending = try c.decodeIfPresent([PendingItem].self, forKey: .pending) ?? []
         self.ignoredLibraryKeys = try c.decodeIfPresent(Set<String>.self, forKey: .ignoredLibraryKeys) ?? []
+        self.cloudSyncDirectory = try c.decodeIfPresent(String.self, forKey: .cloudSyncDirectory)
+        self.autoImportOnLaunch = try c.decodeIfPresent(Bool.self, forKey: .autoImportOnLaunch) ?? true
+        self.seedDefaultsOnLaunch = try c.decodeIfPresent(Bool.self, forKey: .seedDefaultsOnLaunch) ?? true
+        self.writeFinderIconsOnApply = try c.decodeIfPresent(Bool.self, forKey: .writeFinderIconsOnApply) ?? true
+        self.defaultLibrarySort = try c.decodeIfPresent(String.self, forKey: .defaultLibrarySort) ?? "alpha"
+        self.saveBeforeApplyDefault = try c.decodeIfPresent(Bool.self, forKey: .saveBeforeApplyDefault) ?? true
+        self.maxSnapshotsPerMachine = try c.decodeIfPresent(Int.self, forKey: .maxSnapshotsPerMachine) ?? 0
     }
 
     private enum CodingKeys: String, CodingKey {
         case machineId, role, hiddenFavorites, pathOverrides, localOnlyFavorites, pending, ignoredLibraryKeys
+        case cloudSyncDirectory, autoImportOnLaunch, seedDefaultsOnLaunch, writeFinderIconsOnApply
+        case defaultLibrarySort, saveBeforeApplyDefault, maxSnapshotsPerMachine
     }
 
     public static let defaultConfig = LocalConfig()

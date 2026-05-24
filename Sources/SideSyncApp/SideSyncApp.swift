@@ -25,5 +25,12 @@ struct SideSyncApp: App {
         }
         .windowStyle(.titleBar)
         .defaultSize(width: 1000, height: 600)
+
+        // Native Settings window — ⌘, and menu bar > SideSync > Settings…
+        Settings {
+            SettingsView()
+                .environment(appState)
+                .frame(width: 560, height: 460)
+        }
     }
 }
