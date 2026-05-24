@@ -90,10 +90,46 @@ struct LibraryPaneView: View {
                 .foregroundStyle(.tertiary)
                 .help("\(displayedCount) item\(displayedCount == 1 ? "" : "s") shown")
 
+            if !state.showArchivedLibrary {
+                addMenu
+            }
+
             sortPicker(bindable: bindable)
 
             archiveToggle
         }
+    }
+
+    @ViewBuilder
+    private var addMenu: some View {
+        Menu {
+            Button {
+                state.addLibraryFolderFromPicker()
+            } label: {
+                Label("Add Folder…", systemImage: "folder.badge.plus")
+            }
+
+            Menu {
+                ForEach(AppState.dividerStyles, id: \.self) { style in
+                    Button {
+                        state.addDivider(style: style)
+                    } label: {
+                        Text(style)
+                            .font(.system(.body, design: .monospaced))
+                    }
+                }
+            } label: {
+                Label("Add Divider", systemImage: "minus")
+            }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Add an item to the Library — pick a folder or insert a divider style")
     }
 
     private var displayedCount: Int {

@@ -609,9 +609,15 @@ class AppState {
     /// Each item is linked to a Library entry (creating one if needed) so
     /// the record is unified across Current, Pending, and Library.
     func resetPendingToCurrent() {
-        let mapped = localFavorites.map { fav in
+        let mapped = localFavorites.map { fav -> PendingItem in
             let libId = ensureLibraryEntry(name: fav.name, path: fav.path)
-            return PendingItem(name: fav.name, path: fav.path, libraryItemId: libId)
+            let lib = libId.flatMap { id in cloud?.favorites.first { $0.id == id } }
+            return PendingItem(
+                name: fav.name,
+                path: fav.path,
+                libraryItemId: libId,
+                isDivider: lib?.isDivider ?? false
+            )
         }
         pending = mapped
         selectedPendingItemId = nil
@@ -988,10 +994,12 @@ class AppState {
     func loadSnapshotIntoPending(_ snapshot: SidebarSnapshot) {
         let mapped = snapshot.items.map { item -> PendingItem in
             let libId = ensureLibraryEntry(name: item.name, path: item.path)
+            let lib = libId.flatMap { id in cloud?.favorites.first { $0.id == id } }
             return PendingItem(
                 name: item.name,
                 path: item.path,
-                libraryItemId: libId
+                libraryItemId: libId,
+                isDivider: lib?.isDivider ?? false
             )
         }
         pending = mapped
@@ -1481,9 +1489,10 @@ class AppState {
         }
     }
 
-    /// Add a divider as a new Library record + a linked Pending row. Each
-    /// call creates a unique sentinel — multiple dividers with identical
-    /// styles are allowed because their underlying URLs differ.
+    /// Create a divider as a new Library record. Each call creates a unique
+    /// sentinel — multiple dividers with identical styles are allowed because
+    /// their underlying URLs differ. The user then drags the new tile from
+    /// the Library to Pending whenever they want to use it.
     func addDivider(style: String) {
         let trimmed = style.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, !trimmed.contains("/") else {
@@ -1516,20 +1525,42 @@ class AppState {
         do {
             try cloudService.write(cloudData)
             cloud = cloudData
+            statusMessage = "Added divider to Library — drag it to Pending to use"
         } catch {
             errorMessage = "Couldn't save divider: \(error.localizedDescription)"
-            return
         }
+    }
 
-        var newPending = pending
-        newPending.append(PendingItem(
-            name: trimmed,
-            path: sentinelPath,
-            libraryItemId: lib.id,
-            isDivider: true
-        ))
-        pending = newPending
-        statusMessage = "Added divider to Pending"
+    /// Open an NSOpenPanel to pick a folder, then create a Library record for
+    /// it. Same end result as dragging a folder from Finder, but discoverable
+    /// for users who don't think to drag.
+    func addLibraryFolderFromPicker() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = true
+        panel.message = "Choose folders to add to the Library"
+        panel.prompt = "Add"
+
+        guard panel.runModal() == .OK else { return }
+        let urls = panel.urls.filter { $0.isFileURL }
+        guard !urls.isEmpty else { return }
+
+        var added = 0
+        for url in urls {
+            let path = url.path
+            let name = url.lastPathComponent
+            guard FileManager.default.fileExists(atPath: path) else { continue }
+            let beforeCount = cloud?.favorites.count ?? 0
+            _ = ensureLibraryEntry(name: name, path: path)
+            let afterCount = cloud?.favorites.count ?? 0
+            if afterCount > beforeCount { added += 1 }
+        }
+        if added > 0 {
+            statusMessage = "Added \(added) folder\(added == 1 ? "" : "s") to Library"
+        } else {
+            statusMessage = "Folders already in Library"
+        }
     }
 
     /// Delete the sentinel folder backing a divider Library record. Called
@@ -1558,7 +1589,8 @@ class AppState {
         newPending.append(PendingItem(
             name: lib.name,
             path: path,
-            libraryItemId: lib.id
+            libraryItemId: lib.id,
+            isDivider: lib.isDivider
         ))
         pending = newPending
         statusMessage = "Added \"\(lib.name)\" to Pending"
@@ -1616,7 +1648,7 @@ class AppState {
                             for: lib, machineId: machineId, config: config
                         ) ?? lib.paths[machineId] ?? ""
                         newPending.insert(
-                            PendingItem(name: lib.name, path: path, libraryItemId: lib.id),
+                            PendingItem(name: lib.name, path: path, libraryItemId: lib.id, isDivider: lib.isDivider),
                             at: insertAt
                         )
                         insertAt += 1
@@ -1624,8 +1656,9 @@ class AppState {
                     case .current:
                         guard let libId = ensureLibraryEntry(name: d.name, path: d.path) else { continue }
                         if newPending.contains(where: { $0.libraryItemId == libId }) { continue }
+                        let lib = cloud?.favorites.first(where: { $0.id == libId })
                         newPending.insert(
-                            PendingItem(name: d.name, path: d.path, libraryItemId: libId),
+                            PendingItem(name: d.name, path: d.path, libraryItemId: libId, isDivider: lib?.isDivider ?? false),
                             at: insertAt
                         )
                         insertAt += 1
